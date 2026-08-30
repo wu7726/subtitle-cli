@@ -323,3 +323,5 @@ def test_invalid_input_raises_value_error(tmp_path: Path):
     client = FakeClient()
     with pytest.raises(ValueError):
         run_collection("BV123", tmp_path, client)
+
+

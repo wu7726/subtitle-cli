@@ -15,6 +15,7 @@ import typer
 
 from .bilibili.client import BilibiliClient, BilibiliError, RiskControlError, normalize_cookie
 from .pipeline import format_preview, has_failure, preview_first_episode, run_collection, summarize
+from .vault import collection_root, load_config, save_config
 
 app = typer.Typer(add_completion=False, help="B站合集字幕提取器：输入合集或其内任一视频链接，一次性提取整个合集的字幕为 Markdown。")
 
@@ -35,11 +36,22 @@ def main(
         ...,
         help="合集页 URL（含 sid= 或 season_id=）、合集内任一视频的 URL 或 BV 号（自动识别所属合集）、或纯数字 season_id",
     ),
-    output: Path = typer.Option(
-        Path("."),
+    output: Optional[Path] = typer.Option(
+        None,
         "--output",
         "-o",
-        help="下载根目录（默认当前目录），实际输出到 <output>/<合集名>/EP01 xx.md",
+        help="输出到普通文件夹（默认当前目录）；显式指定时优先于 vault",
+    ),
+    vault: Optional[str] = typer.Option(
+        None,
+        "--vault",
+        help="Obsidian vault 根目录：笔记写入 <vault>/<字幕文件夹>/<合集名>/；"
+        "传入即记住（下次可省略）",
+    ),
+    vault_subdir: Optional[str] = typer.Option(
+        None,
+        "--vault-subdir",
+        help="vault 内字幕文件夹（默认 B站字幕，可嵌套如 学习/B站字幕）",
     ),
     cookie: Optional[str] = typer.Option(
         None,
@@ -63,6 +75,24 @@ def main(
             typer.echo("无法获取字幕列表，已停止。", err=True)
             raise typer.Exit(code=2)
 
+    # 输出模式判定（开发计划 M7）：--output 显式给出 → 普通文件夹优先；
+    # 否则已配置 vault（参数 > 配置文件，显式传入即写回）→ obsidian 模式；
+    # 都没有 → 沿用旧默认（当前目录，普通输出）。
+    if vault or vault_subdir:
+        cfg = load_config()
+        if vault:
+            cfg.vault = vault
+        if vault_subdir:
+            cfg.subdir = vault_subdir
+        save_config(cfg)
+    cfg = load_config()
+    if output is None and cfg.vault.strip():
+        note_mode = "obsidian"
+        output = collection_root(cfg)
+    else:
+        note_mode = "plain"
+        output = output if output is not None else Path(".")
+
     try:
         output.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -72,10 +102,14 @@ def main(
     try:
         with BilibiliClient(cookie=cookie) as client:
             if preview:
-                result = preview_first_episode(source, client, log=typer.echo)
+                result = preview_first_episode(
+                    source, client, log=typer.echo, note_mode=note_mode
+                )
                 typer.echo(format_preview(result))
                 raise typer.Exit(code=0)
-            outcome = run_collection(source, output, client, log=typer.echo)
+            outcome = run_collection(
+                source, output, client, log=typer.echo, note_mode=note_mode
+            )
     except ValueError as exc:
         typer.echo(f"输入无效：{exc}", err=True)
         raise typer.Exit(code=2) from None

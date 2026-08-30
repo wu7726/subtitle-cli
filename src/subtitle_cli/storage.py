@@ -6,8 +6,9 @@ from pathlib import Path
 
 from . import config
 
-# Windows 文件名非法字符
-_ILLEGAL_CHARS = '<>:"/\\|?*'
+# Windows 文件名非法字符 + Obsidian 双链保留字符（# 锚点、[] 链接语法、
+# ^ 块引用——出现在文件名里会让索引页双链永远失配，开发计划 §2.3）
+_ILLEGAL_CHARS = '<>:"/\\|?*#[]^'
 # Windows 保留名（不区分大小写，含带扩展名形式如 CON.txt）
 _WINDOWS_RESERVED = (
     {"CON", "PRN", "AUX", "NUL"}
@@ -66,8 +67,12 @@ def is_downloaded(path: Path) -> bool:
         return False
 
 
-def write_markdown(path: Path, content: str) -> None:
-    """以 UTF-8 + LF 落盘；目标已存在时抛 FileExistsError（增量保护）。"""
+def write_markdown(path: Path, content: str, *, overwrite: bool = False) -> None:
+    """以 UTF-8 + LF 落盘；目标已存在时抛 FileExistsError（增量保护）。
+
+    overwrite=True 仅用于索引页重生成等工具自有产物（PRD §7 写入纪律）。
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "x", encoding="utf-8", newline="\n") as f:
+    mode = "w" if overwrite else "x"
+    with open(path, mode, encoding="utf-8", newline="\n") as f:
         f.write(content)
