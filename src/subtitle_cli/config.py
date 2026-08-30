@@ -32,3 +32,9 @@ PARAGRAPH_PAUSE_SECONDS = 2.0  # 与上一行起点间隔超过该值视为说�
 
 # ---- 存储 ----
 TITLE_MAX_CHARS = 60  # 文件名中标题截断长度，保证整路径远低于 260
+
+# ---- 本地语音转写（ASR 兜底，多平台扩展计划 §3 第 2 步）----
+ASR_MODEL_SIZE = "small"  # 默认模型：small（约 480MB，中文质量与 CPU 速度的平衡点）
+ASR_DEVICE = "auto"  # auto：有 NVIDIA 显卡用 CUDA，否则 CPU
+ASR_MODEL_DIR = "~/.subtitle-cli/models"  # 模型下载目录（可删除重下）
+ASR_LOG_EVERY_SEGMENTS = 20  # 转写进度日志间隔（段数）

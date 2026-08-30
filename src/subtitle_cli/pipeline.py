@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Callable, Literal, Protocol
@@ -12,9 +13,10 @@ from typing import Callable, Literal, Protocol
 from pydantic import BaseModel
 
 from . import notes, storage
+from . import asr as asr_module  # 别名：run_collection 的 asr 参数会遮蔽模块名
 from .bilibili.client import BilibiliError, RiskControlError
 from .bilibili.models import Episode, EpisodeResult, EpisodeStatus, SubtitleTrack
-from .config import RISK_ABORT_THRESHOLD
+from .config import RISK_ABORT_THRESHOLD, ASR_MODEL_SIZE
 from .converter import subtitle_to_markdown
 from .errors import PlatformError
 from .reviewer import AuditReport, CleaningStats, audit_markdown, clean_lines, format_report
@@ -42,6 +44,7 @@ class RunOutcome(BaseModel):
     note_mode: Literal["plain", "obsidian"] = "plain"
     output_dir: str = ""  # 落点父目录（obsidian 模式 = <vault>/<subdir>）
     index_path: str | None = None  # 重生成的合集索引页路径（obsidian 模式）
+    asr_count: int = 0  # 本次经本地语音转写出正文的集数（汇总展示）
 
 
 class PreviewResult(BaseModel):
@@ -104,11 +107,16 @@ def run_collection(
     log: Callable[[str], None] = print,
     note_mode: Literal["plain", "obsidian"] = "plain",
     fetched_at: date | None = None,
+    asr: bool = False,
+    asr_model: str = ASR_MODEL_SIZE,
+    asr_limit: int | None = None,
 ) -> RunOutcome:
     """跑完整流程。输入不合法抛 ValueError（CLI 转为退出码 2）。
 
     note_mode="obsidian"：成功分集包上属性头（PRD F2），运行结束重生成
     合集索引页（PRD F3）；正文仍由 converter 产出，一字不动。
+    asr=True：无现成字幕/文稿的分集下载音频走本地语音转写兜底
+    （多平台扩展计划 §3 第 2 步）；依赖未安装时抛 AsrDependencyError。
     """
     season_id = client.resolve_input(raw_input)
     collection_name, episodes = client.list_episodes(season_id)
@@ -117,10 +125,17 @@ def run_collection(
     log(f"合集《{collection_name}》共 {len(episodes)} 集，输出目录：{output_dir}")
     _check_login(client, log)
 
+    if asr:
+        asr_module.ensure_dependency()  # 提前失败：避免下载完音频才发现缺依赖
+        if getattr(client, "download_audio", None) is None:
+            log("⚠️ 当前平台不支持音频下载，转写兜底不生效，无字幕的分集将保持无字幕")
+            asr = False
+
     results: list[EpisodeResult] = []
     consecutive_risk = 0
     aborted = False
     reports: list[AuditReport] = []
+    asr_count = 0
 
     for episode in episodes:
         label = f"EP{episode.index:02d}"
@@ -158,6 +173,18 @@ def run_collection(
             continue
 
         consecutive_risk = 0
+        if track is None and asr:
+            if asr_limit is not None and asr_count >= asr_limit:
+                results.append(EpisodeResult(episode=episode, status=EpisodeStatus.NO_SUBTITLE))
+                log(f"{label} 无字幕（已达本次转写上限 {asr_limit} 集，未转写）")
+                continue
+            try:
+                track = _asr_fallback(client, episode, asr_model, log)
+                asr_count += 1
+            except PlatformError as exc:
+                results.append(EpisodeResult(episode=episode, status=EpisodeStatus.FAILED, reason=str(exc)))
+                log(f"{label} 失败：{exc}")
+                continue
         if track is None:
             results.append(EpisodeResult(episode=episode, status=EpisodeStatus.NO_SUBTITLE))
             log(f"{label} 无字幕")
@@ -213,7 +240,34 @@ def run_collection(
         note_mode=note_mode,
         output_dir=str(output_dir),
         index_path=str(index_path) if index_path else None,
+        asr_count=asr_count,
     )
+
+
+def _asr_fallback(
+    client: PlatformClient,
+    episode: Episode,
+    asr_model: str,
+    log: Callable[[str], None],
+) -> SubtitleTrack:
+    """无字幕分集的语音转写兜底：下载音频到临时目录 → faster-whisper → 字幕行。
+
+    音频临时文件随 with 块删除；任何环节失败抛 PlatformError（该集计 FAILED），
+    不中断整体流程。
+    """
+    label = f"EP{episode.index:02d}"
+    log(f"{label} 无字幕，转本地语音转写（模型 {asr_model}，可能较慢）…")
+    download = getattr(client, "download_audio")
+    with tempfile.TemporaryDirectory(prefix="subtitle-cli-asr-") as tmp:
+        audio_path = Path(tmp) / f"audio-{episode.index}.bin"
+        download(episode, audio_path)
+        size_kb = audio_path.stat().st_size // 1024
+        log(f"{label} 音频已下载（{size_kb} KB），开始转写")
+        lines = asr_module.transcribe_audio(audio_path, model_size=asr_model, log=log)
+    if not lines:
+        raise PlatformError(f"语音转写结果为空（可能无人声或纯音乐）：{episode.title}")
+    log(f"{label} 转写完成：{len(lines)} 段")
+    return SubtitleTrack(lan="asr", lines=lines)
 
 
 def _uploader_of(client: PlatformClient, episodes: list[Episode]) -> str:
@@ -294,7 +348,12 @@ def summarize(outcome: RunOutcome) -> str:
     failed = [r for r in results if r.status == EpisodeStatus.FAILED]
 
     lines = ["—— 汇总 ——"]
-    lines.append(f"成功 {success + skipped}（其中增量跳过 {skipped}）")
+    if outcome.asr_count:
+        lines.append(
+            f"成功 {success + skipped}（其中增量跳过 {skipped}、本地转写 {outcome.asr_count}）"
+        )
+    else:
+        lines.append(f"成功 {success + skipped}（其中增量跳过 {skipped}）")
     if no_subtitle:
         labels = "、".join(f"EP{r.episode.index:02d}" for r in no_subtitle)
         lines.append(f"无字幕  {len(no_subtitle)}：{labels}")
@@ -385,7 +444,10 @@ def format_preview(result: PreviewResult) -> str:
     if result.logged_in is False:
         parts.append("⚠️ 未登录：B站不向未登录请求返回字幕列表，无法预览内容。请检查 Cookie。")
     if not result.markdown:
-        parts.append("第 1 集没有可用字幕，无法预览；可继续批量提取其余分集。")
+        parts.append(
+            "第 1 集没有可用字幕，无法预览；可继续批量提取其余分集"
+            "（提取时可加 --asr 开启本地语音转写兜底）。"
+        )
     else:
         parts.append(format_report(result.audit))
         if result.meta is not None:

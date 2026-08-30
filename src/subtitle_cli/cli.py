@@ -13,6 +13,7 @@ from typing import Optional
 
 import typer
 
+from .asr import AsrDependencyError
 from .bilibili.client import RiskControlError, normalize_cookie
 from .dispatch import BILIBILI, PODCAST, create_client, detect_platform
 from .errors import PlatformError
@@ -66,6 +67,22 @@ def main(
         "--preview",
         help="只提取第 1 集并输出审查报告（排版与内容清洗情况），不写文件",
     ),
+    asr: bool = typer.Option(
+        False,
+        "--asr",
+        help="无字幕/无文稿的分集下载音频，用本地语音转写兜底（需先 pip install -e \".[asr]\"；"
+        "首次运行自动下载模型，CPU 转写较慢，重跑会自动跳过已成功分集）",
+    ),
+    asr_model: str = typer.Option(
+        "small",
+        "--asr-model",
+        help="语音转写模型：tiny/base/small/medium（越大越准越慢，默认 small）",
+    ),
+    asr_limit: Optional[int] = typer.Option(
+        None,
+        "--asr-limit",
+        help="本次最多转写多少集（默认不限；无字幕分集很多时建议限制）",
+    ),
 ) -> None:
     """提取B站合集或播客的字幕，保存为 Markdown 文件。"""
     _force_utf8_stdio()
@@ -118,10 +135,14 @@ def main(
                 typer.echo(format_preview(result))
                 raise typer.Exit(code=0)
             outcome = run_collection(
-                source, output, client, log=typer.echo, note_mode=note_mode
+                source, output, client, log=typer.echo, note_mode=note_mode,
+                asr=asr, asr_model=asr_model, asr_limit=asr_limit,
             )
     except ValueError as exc:
         typer.echo(f"输入无效：{exc}", err=True)
+        raise typer.Exit(code=2) from None
+    except AsrDependencyError as exc:
+        typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from None
     except RiskControlError as exc:
         typer.echo(f"触发风控，已停止：{exc}\n稍后重跑同一条命令，已成功的分集会自动跳过。", err=True)

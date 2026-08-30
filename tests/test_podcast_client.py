@@ -5,6 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from subtitle_cli.bilibili.models import Episode
 from subtitle_cli.podcast import feed as feed_mod
 from subtitle_cli.podcast.client import PodcastClient, PodcastError, choose_transcript
 
@@ -32,6 +33,8 @@ def mock_handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text=VTT_TEXT)
     if url == "https://example.com/transcripts/ep3.html":
         return httpx.Response(200, text=EP3_HTML, headers={"content-type": "text/html"})
+    if url == "https://example.com/audio/ep1.mp3":
+        return httpx.Response(200, content=b"mp3-bytes")
     return httpx.Response(404, text="missing")
 
 
@@ -131,6 +134,35 @@ def test_fetch_transcript_404_raises_podcast_error():
         broken = episodes[1].model_copy(update={"transcript_url": "https://example.com/transcripts/404"})
         with pytest.raises(PodcastError):
             client.fetch_subtitles(broken)
+
+
+# ---- 音频下载（ASR 兜底）----
+def test_download_audio_writes_enclosure(tmp_path):
+    with make_client(mock_handler) as client:
+        _, episodes = client.list_episodes("https://example.com/feed.xml")
+        dest = tmp_path / "audio.bin"
+        client.download_audio(
+            episodes[0].model_copy(update={"audio_url": "https://example.com/audio/ep1.mp3"}),
+            dest,
+        )
+    assert dest.read_bytes() == b"mp3-bytes"
+
+
+def test_download_audio_without_enclosure_raises(tmp_path):
+    with make_client(mock_handler) as client:
+        with pytest.raises(PodcastError):
+            client.download_audio(
+                Episode(bvid="x", title="t", index=1, audio_url=""), tmp_path / "a.bin"
+            )
+
+
+def test_download_audio_http_error_raises(tmp_path):
+    with make_client(mock_handler) as client:
+        with pytest.raises(PodcastError):
+            client.download_audio(
+                Episode(bvid="x", title="t", index=1, audio_url="https://example.com/audio/404.mp3"),
+                tmp_path / "a.bin",
+            )
 
 
 # ---- 选轨 ----

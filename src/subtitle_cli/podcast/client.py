@@ -11,6 +11,7 @@ from __future__ import annotations
 import random
 import re
 import time
+from pathlib import Path
 from typing import Callable
 
 import httpx
@@ -121,6 +122,7 @@ class PodcastClient:
                     index=index,
                     source_url=item.link if item.link.startswith("http") else (item.guid if item.guid.startswith("http") else ""),
                     transcript_url=chosen.url if chosen else None,
+                    audio_url=item.audio_url,
                 )
             )
         title = parsed.title or feed_url
@@ -140,6 +142,28 @@ class PodcastClient:
     def uploader_name(self, bvid: str) -> str:
         """节目作者（RSS itunes:author；失败返回空串，不阻断主流程）。"""
         return self._author
+
+    def download_audio(self, episode: Episode, dest: Path) -> Path:
+        """下载单集音频（RSS enclosure）到 dest（ASR 兜底用；协议可选能力）。"""
+        if not episode.audio_url:
+            raise PodcastError(f"该单集没有音频附件（enclosure）：{episode.title}")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with self._http.stream(
+                "GET", episode.audio_url, timeout=config.REQUEST_TIMEOUT * 4
+            ) as resp:
+                if resp.status_code != 200:
+                    raise PodcastError(
+                        f"音频下载失败（HTTP {resp.status_code}）：{episode.audio_url}"
+                    )
+                with open(dest, "wb") as f:
+                    for chunk in resp.iter_bytes():
+                        f.write(chunk)
+        except httpx.TransportError as exc:
+            raise PodcastError(
+                f"音频下载网络错误（{exc.__class__.__name__}）：{episode.audio_url}"
+            ) from exc
+        return dest
 
     # ---- 内部 ----
     def _resolve_apple_id(self, apple_id: str) -> str:

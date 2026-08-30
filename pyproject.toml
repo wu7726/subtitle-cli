@@ -13,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+asr = ["faster-whisper>=1.0"]
 
 [project.scripts]
 subtitle-cli = "subtitle_cli.cli:app"

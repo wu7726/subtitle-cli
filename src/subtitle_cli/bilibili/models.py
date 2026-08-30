@@ -25,6 +25,7 @@ class Episode(BaseModel):
     index: int  # 合集内序号，从 1 开始
     source_url: str = ""  # 单集页面链接（属性头 source 优先取它）
     transcript_url: str | None = None  # 现成文稿地址（播客；B站不使用）
+    audio_url: str = ""  # 音频地址（播客 enclosure；B站经 playurl 动态获取，不用此字段）
 
 
 class SubtitleLine(BaseModel):
@@ -101,6 +102,33 @@ class PageInfo(BaseModel):
     cid: int
     page: int = 1
     part: str = ""
+
+
+class DashAudioStream(BaseModel):
+    """playurl DASH 的一条音频流（只需取流地址）。"""
+
+    id: int = 0
+    bandwidth: int = 0
+    base_url: str = Field(default="", alias="baseUrl")
+    backup_url: list[str] = Field(default_factory=list, alias="backupUrl")
+
+    model_config = {"populate_by_name": True}
+
+    def best_url(self) -> str:
+        """主地址优先，备选地址兜底（CDN 单点偶发失败）。"""
+        return self.base_url or (self.backup_url[0] if self.backup_url else "")
+
+
+class DashData(BaseModel):
+    """playurl 的 dash 部分（只要音频流列表）。"""
+
+    audio: list[DashAudioStream] = Field(default_factory=list)
+
+
+class PlayurlData(BaseModel):
+    """x/player/wbi/playurl 的 data 部分（ASR 兜底下载音频用）。"""
+
+    dash: DashData = Field(default_factory=DashData)
 
 
 class UgcSeason(BaseModel):

@@ -9,6 +9,7 @@ from __future__ import annotations
 import random
 import re
 import time
+from pathlib import Path
 from typing import Callable
 
 import httpx
@@ -18,6 +19,7 @@ from ..errors import PlatformError
 from .models import (
     Episode,
     PageInfo,
+    PlayurlData,
     PlayerData,
     SeasonArchivesPage,
     SubtitleLine,
@@ -30,6 +32,7 @@ API_BASE = "https://api.bilibili.com"
 SEASON_ARCHIVES_URL = f"{API_BASE}/x/polymer/web-space/seasons_archives_list"
 PAGELIST_URL = f"{API_BASE}/x/player/pagelist"
 PLAYER_V2_URL = f"{API_BASE}/x/player/wbi/v2"
+PLAYURL_URL = f"{API_BASE}/x/player/wbi/playurl"
 NAV_URL = f"{API_BASE}/x/web-interface/nav"
 VIEW_URL = f"{API_BASE}/x/web-interface/wbi/view"
 
@@ -317,6 +320,42 @@ class BilibiliClient:
         if not pages:
             raise BilibiliError(f"pagelist 未返回任何分P：{bvid}")
         return str(pages[0].cid)
+
+    def download_audio(self, episode: Episode, dest: Path) -> Path:
+        """下载该集音轨到 dest（ASR 兜底用；协议可选能力）。
+
+        playurl(wbi 签名, fnval=16) 取 DASH 音频流，选带宽最高的一档；
+        CDN 要求 Referer 为 bilibili.com（实测无 Cookie 也可下载）。
+        """
+        if episode.cid is None:
+            episode.cid = self.fetch_cid(episode.bvid)
+        payload = self._api_get(
+            PLAYURL_URL,
+            params={"bvid": episode.bvid, "cid": episode.cid, "fnval": 16, "fourk": 1},
+            signed=True,
+            delay_range=config.MEDIA_DELAY_RANGE,
+        )
+        playurl = PlayurlData.model_validate(payload.get("data") or {})
+        streams = sorted(playurl.dash.audio, key=lambda s: s.bandwidth, reverse=True)
+        if not streams:
+            raise BilibiliError(f"playurl 未返回音频流：{episode.bvid}")
+        url = streams[0].best_url()
+        if not url:
+            raise BilibiliError(f"音频流缺少下载地址：{episode.bvid}")
+        headers = {"Referer": config.REFERER, "Range": "bytes=0-"}
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with self._http.stream(
+                "GET", url, headers=headers, timeout=config.REQUEST_TIMEOUT * 4
+            ) as resp:
+                if resp.status_code not in (200, 206):
+                    raise BilibiliError(f"音频下载失败（HTTP {resp.status_code}）：{episode.bvid}")
+                with open(dest, "wb") as f:
+                    for chunk in resp.iter_bytes():
+                        f.write(chunk)
+        except httpx.TransportError as exc:
+            raise BilibiliError(f"音频下载网络错误（{exc.__class__.__name__}）：{episode.bvid}") from exc
+        return dest
 
     # ---- 内部：请求与重试 ----
     def _api_get(

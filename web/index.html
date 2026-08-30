@@ -26,7 +26,7 @@
   .card h2 .bar { display: inline-block; width: 4px; height: 13px; border-radius: 2px; background: var(--accent); vertical-align: -2px; margin-right: 8px; }
   label { display: block; font-size: 12.5px; color: var(--muted); margin: 14px 0 6px; }
   label:first-of-type { margin-top: 0; }
-  input[type=text], input[type=password] {
+  input[type=text], input[type=password], select {
     width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: 9px;
     font-size: 14px; font-family: inherit; outline: none; background: #fcfcfb; color: var(--ink);
   }
@@ -177,6 +177,21 @@
         </div>
       </div>
     </div>
+    <div id="asrRow" class="modes" style="margin-top:12px" hidden>
+      <label><input type="checkbox" id="asrToggle" onchange="setAsr()"> 无字幕时本地语音转写兜底（较慢；需先安装 asr 依赖）</label>
+      <span id="asrOpts" hidden style="display:flex; align-items:center; gap:6px; margin-top:6px; flex-wrap:wrap">
+        <label for="asrModel">模型</label>
+        <select id="asrModel">
+          <option value="tiny">tiny（最快，较不准）</option>
+          <option value="base">base</option>
+          <option value="small" selected>small（推荐）</option>
+          <option value="medium">medium（最准，最慢）</option>
+        </select>
+        <label for="asrLimit">本次最多转写</label>
+        <input type="number" id="asrLimit" min="1" style="width:64px" placeholder="不限">
+        <span>集（留空不限，重跑自动跳过已成功分集）</span>
+      </span>
+    </div>
     <div class="row-btn">
       <button id="startBtn" class="primarybtn" onclick="start()">开始提取</button>
       <button id="previewBtn" class="ghostbtn" onclick="previewFirst()">预览第 1 集（审查排版与内容）</button>
@@ -251,12 +266,17 @@ function setMode() {
   const demo = $("modeDemo").checked;
   $("cookieRow").hidden = demo;
   $("outputSection").hidden = demo;
+  $("asrRow").hidden = demo;
   $("demoHint").hidden = !demo;
   if (demo) {
     if (!$("sourceInput").value.trim()) $("sourceInput").value = DEMO_VIDEO_URL;
   } else if ($("sourceInput").value.trim() === DEMO_VIDEO_URL) {
     $("sourceInput").value = "";
   }
+}
+
+function setAsr() {
+  $("asrOpts").hidden = !$("asrToggle").checked;
 }
 
 function setOutMode() {
@@ -527,6 +547,12 @@ function collectTarget(startBody) {
     if (subdir && subdir !== "B站字幕") startBody.vault_subdir = subdir;
   } else {
     startBody.output = $("outputInput").value.trim();
+  }
+  if ($("asrToggle").checked) {
+    startBody.asr = true;
+    startBody.asr_model = $("asrModel").value;
+    const limit = parseInt($("asrLimit").value, 10);
+    if (Number.isInteger(limit) && limit > 0) startBody.asr_limit = limit;
   }
   return true;
 }

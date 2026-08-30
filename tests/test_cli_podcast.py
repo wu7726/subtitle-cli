@@ -91,3 +91,37 @@ def test_cli_garbage_input_still_bilibili_error(tmp_path: Path, monkeypatch):
 
     assert result.exit_code == 2
     assert "无法从输入中识别合集" in result.output
+
+
+def test_cli_asr_missing_dependency_exits_2(tmp_path: Path, monkeypatch, fake_podcast):
+    """--asr 且依赖未安装：快速失败并给出安装指引（退出码 2）。"""
+    import sys
+
+    monkeypatch.setenv("SUBTITLE_CLI_CONFIG", str(tmp_path / "config.json"))
+    monkeypatch.setitem(sys.modules, "faster_whisper", None)
+
+    result = runner.invoke(
+        app, ["https://example.com/feed.xml", "--output", str(tmp_path / "out"), "--asr"]
+    )
+
+    assert result.exit_code == 2
+    assert "pip install" in result.output
+
+
+def test_cli_asr_without_download_audio_warns_and_continues(
+    tmp_path: Path, monkeypatch, fake_podcast
+):
+    """客户端不支持音频下载：告警一次，按普通提取继续（退出码 0）。"""
+    from subtitle_cli import asr as asr_mod
+
+    monkeypatch.setenv("SUBTITLE_CLI_CONFIG", str(tmp_path / "config.json"))
+    monkeypatch.setattr(asr_mod, "ensure_dependency", lambda: None)
+
+    result = runner.invoke(
+        app,
+        ["https://example.com/feed.xml", "--output", str(tmp_path / "out"), "--asr"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "不支持音频下载" in result.output
+    assert "成功 2" in result.output

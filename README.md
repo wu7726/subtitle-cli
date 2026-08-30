@@ -7,7 +7,8 @@
 ## 功能
 
 - 输入灵活：合集页 URL（含 `sid=` / `season_id=`）、**合集内单个视频的链接或 BV 号**（自动识别所属合集）、**多P视频链接**（视频选集 N/M 形态，按分P批量提取）、纯数字 season_id
-- **播客支持**：RSS 地址或 Apple Podcasts 节目链接 → 按发布时间正序编号提取各单集**现成文稿**（RSS 的 `podcast:transcript` 标签，支持 VTT/SRT/JSON/纯文本/HTML），笔记默认落 vault 的 `播客字幕/` 文件夹（可用 `--vault-subdir` 改）；没有文稿的单集归入「无字幕」。**注意**：实测中文播客极少数提供文稿标签（抽样 40 个热门节目为 0），英文播客覆盖较好；小宇宙网页端不公开 RSS，请从 App「复制 RSS 链接」后粘贴。多平台扩展的后续计划（语音转写、抖音等）见 `docs/多平台扩展计划.md`
+- **播客支持**：RSS 地址或 Apple Podcasts 节目链接 → 按发布时间正序编号提取各单集**现成文稿**（RSS 的 `podcast:transcript` 标签，支持 VTT/SRT/JSON/纯文本/HTML），笔记默认落 vault 的 `播客字幕/` 文件夹（可用 `--vault-subdir` 改）；没有文稿的单集归入「无字幕」。**注意**：实测中文播客极少数提供文稿标签（抽样 40 个热门节目为 0），英文播客覆盖较好；小宇宙网页端不公开 RSS，请从 App「复制 RSS 链接」后粘贴
+- **本地语音转写兜底（ASR）**：`--asr` 开启后，无字幕/无文稿的分集自动下载音频（B站音轨 / 播客 enclosure），用 faster-whisper 本地转写出正文——中文播客、无字幕B站视频全覆盖。模型从 ModelScope 下载（国内直连，支持断点续传）；有 NVIDIA 显卡且装了 CUDA/cuDNN 时自动用显卡，否则用 CPU（int8 量化）。纯音乐/无人声的分集会明确报失败而非产出空笔记
 - 自动翻页遍历全部分集，长合集（几十上百集）完整提取
 - 逐集获取字幕并选轨：人工 CC（zh-CN）优先，其次 AI 字幕（ai-zh），再退列表第一个
 - 输出纯文本 Markdown：分段拼好的自然段落，无时间轴
@@ -26,8 +27,11 @@
 ```bash
 git clone <本仓库>
 cd 字幕
-pip install -e .
+pip install -e .            # 基础功能（B站 + 播客现成文稿）
+pip install -e ".[asr]"     # 加装本地语音转写（faster-whisper，约 200MB 依赖）
 ```
+
+注意：直接 `pip install faster-whisper` 时，国内网络建议加 `-i https://pypi.tuna.tsinghua.edu.cn/simple`。
 
 ## 快速体验（离线 Demo，无需 Cookie）
 
@@ -76,6 +80,11 @@ subtitle-cli "https://example.com/feed.xml" --vault "D:/Obsidian/MyVault"
 subtitle-cli "https://podcasts.apple.com/cn/podcast/xxx/id123456" --vault "D:/Obsidian/MyVault"
 subtitle-cli "https://example.com/feed.xml" --vault "D:/Obsidian/MyVault" --vault-subdir "学习/播客"
 
+# 无字幕时本地语音转写兜底（需先 pip install -e ".[asr]"）
+subtitle-cli <合集URL或season_id> --asr                          # 默认 small 模型，不限转写集数
+subtitle-cli <合集URL或season_id> --asr --asr-limit 5            # 本次最多转写 5 集
+subtitle-cli <合集URL或season_id> --asr --asr-model medium       # 更准更慢：tiny/base/small/medium
+
 # 旧字幕迁移：把 output/ 里的已有合集转换成新格式写入 vault（不联网）
 subtitle-cli-migrate "output" --vault "D:/Obsidian/MyVault"
 subtitle-cli-migrate "output" --vault "D:/Obsidian/MyVault" --dry-run   # 只看计划不写盘
@@ -84,7 +93,7 @@ subtitle-cli-migrate "output" --vault "D:/Obsidian/MyVault" --overwrite # 重写
 
 视频链接支持带任何参数（`?p=2`、分享参数等），b23.tv 短链暂不支持（请先在浏览器打开后复制完整链接）。输入的视频有三种结局：属于合集 → 提取整个合集；是含多个分P的单视频 → 提取全部分P；单P且无合集 → 明确报错。
 
-**重要**：B站自 2023 年起，未登录状态下 player 接口返回的字幕列表恒为空（CC 和 AI 字幕都一样，2026-08-30 实测确认）。因此**必须携带 Cookie 才能拿到字幕**，否则所有分集都会被归入"无字幕"。
+**重要**：B站自 2023 年起，未登录状态下 player 接口返回的字幕列表恒为空（CC 和 AI 字幕都一样，2026-08-30 实测确认）。因此**必须携带 Cookie 才能拿到字幕**，否则所有分集都会被归入"无字幕"（开启 `--asr` 语音转写兜底后，无字幕分集会转写音频出正文，不再受此限制）。
 
 ### 如何获取 Cookie
 

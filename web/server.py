@@ -185,12 +185,18 @@ def run_extract_job(
     note_mode: str = "plain",
     vault_path: str = "",
     vault_subdir: str = "",
+    asr: bool = False,
+    asr_model: str = "small",
+    asr_limit: int | None = None,
 ) -> None:
     try:
         platform = detect_platform(source)
         if demo and platform == PODCAST:
             _finish_error("演示模式使用内置B站示例数据，仅支持B站输入。", 2)
             return
+        if demo and asr:
+            _log("演示模式不支持语音转写，本次按普通提取执行")
+            asr = False
         if not demo and platform == BILIBILI and cookie:
             cookie, cookie_note = normalize_cookie(cookie)
             if cookie_note:
@@ -208,7 +214,8 @@ def run_extract_job(
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         with create_client(source, cookie or None) as client:
             outcome = run_collection(
-                source, Path(output_dir), client, log=_log, note_mode=note_mode
+                source, Path(output_dir), client, log=_log, note_mode=note_mode,
+                asr=asr, asr_model=asr_model, asr_limit=asr_limit,
             )
         STATE["summary"] = summarize(outcome)
         STATE["exit_code"] = 1 if has_failure(outcome) else 0
@@ -522,6 +529,16 @@ class Handler(BaseHTTPRequestHandler):
             if not demo and not source:
                 self._json({"error": "缺少合集链接或 season_id"}, 400)
                 return
+            asr = bool(data.get("asr")) and not demo
+            asr_model = str(data.get("asr_model") or "small")
+            if asr_model not in ("tiny", "base", "small", "medium"):
+                asr_model = "small"
+            asr_limit_raw = data.get("asr_limit")
+            asr_limit = (
+                int(asr_limit_raw)
+                if isinstance(asr_limit_raw, (int, float)) and asr_limit_raw > 0
+                else None
+            )
             with _lock:
                 STATE.update(
                     running=True,
@@ -540,6 +557,9 @@ class Handler(BaseHTTPRequestHandler):
                     "note_mode": note_mode,
                     "vault_path": vault,
                     "vault_subdir": subdir_used,
+                    "asr": asr,
+                    "asr_model": asr_model,
+                    "asr_limit": asr_limit,
                 },
                 daemon=True,
             ).start()
