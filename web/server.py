@@ -333,7 +333,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(
                 {
                     "current": str(target),
-                    "parent": str(parent) if parent != target else None,
+                    # 盘符根目录的上级 = 空串（回到「此电脑」盘符列表）
+                    "parent": "" if parent == target else str(parent),
                     "dirs": dirs,
                 }
             )

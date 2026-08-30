@@ -480,7 +480,7 @@ async function loadBrowseDir(path) {
     browseCtx.current = j.current;
     browseCtx.parent = j.parent;
     $("browseCurrent").textContent = j.current || "此电脑（点击盘符进入）";
-    $("browseUp").disabled = !j.parent;
+    $("browseUp").disabled = j.parent === null;
     $("browseSelect").disabled = !j.current;
     listEl.innerHTML = j.dirs.length
       ? j.dirs.map((d) => `<button class="browse-row" data-path="${esc(d.path)}">${FOLDER_SVG}<span>${esc(d.name)}</span></button>`).join("")
@@ -493,7 +493,7 @@ async function loadBrowseDir(path) {
 }
 
 function browseParent() {
-  if (browseCtx && browseCtx.parent != null) loadBrowseDir(browseCtx.parent);
+  if (browseCtx && browseCtx.parent !== null) loadBrowseDir(browseCtx.parent);
 }
 
 function chooseBrowse() {

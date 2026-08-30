@@ -258,6 +258,11 @@ def test_browse_api(tmp_path: Path):
         assert {"docs", "src", "web", "tests"} <= {d["name"] for d in repo["dirs"]}
         assert repo["parent"]
 
+        # 盘符根目录：上级为空串（回到「此电脑」），而非 None
+        status, text = _get(base, "/api/browse?path=" + urllib.parse.quote("C:/"))
+        root = json.loads(text)
+        assert status == 200 and root["parent"] == ""
+
         try:
             _get(base, "/api/browse?path=" + urllib.parse.quote(str(tmp_path / "nope")))
             raise AssertionError("应当返回 400")
