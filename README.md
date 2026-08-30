@@ -24,6 +24,16 @@ cd 字幕
 pip install -e .
 ```
 
+## 快速体验（离线 Demo，无需 Cookie）
+
+不想先折腾 Cookie？跑一下离线 Demo：本机起临时 Mock 服务回放B站接口，CLI、转换、落盘全部走真实代码，10 秒内生成 6 集示例字幕：
+
+```bash
+python demo/run_demo.py
+```
+
+输出在 `demo_output/示例合集·美食漫谈/`，包含成功、AI 字幕回退（EP03）、无字幕（EP05）三类场景，并自动演示二次运行的增量跳过。
+
 ## 使用
 
 ```bash
