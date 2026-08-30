@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# 虚拟环境
+.venv/
+
+# 测试与工具缓存
+.pytest_cache/
+
+# 运行产物（下载的字幕输出）
+output/
+字幕/
+
+# 敏感信息：Cookie 等只通过参数/环境变量传入，严禁落盘进仓库
+*.env
