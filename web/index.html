@@ -125,8 +125,8 @@
   <div class="wrap">
     <div class="logo">字</div>
     <div>
-      <h1>B站合集字幕提取器</h1>
-      <p>合集字幕 → Obsidian 知识库笔记 · 本地运行，与命令行 subtitle-cli 同一套核心</p>
+      <h1>字幕提取器</h1>
+      <p>B站合集 / 播客字幕 → Obsidian 知识库笔记 · 本地运行，与命令行 subtitle-cli 同一套核心</p>
     </div>
   </div>
 </header>
@@ -137,8 +137,8 @@
       <label><input type="radio" name="mode" id="modeDemo" checked onchange="setMode()"> 离线演示（内置 Mock，无需 Cookie）</label>
       <label><input type="radio" name="mode" id="modeReal" onchange="setMode()"> 真实接口（需登录 Cookie）</label>
     </div>
-    <label for="sourceInput">合集页 / 合集内任一视频链接 / BV 号 / season_id</label>
-    <input type="text" id="sourceInput" placeholder="支持合集页链接（含 sid=）、合集里单个视频的链接或 BV 号（自动识别整个合集）、多P视频链接、纯数字 season_id">
+    <label for="sourceInput">B站合集链接 / BV 号 / season_id，或播客 RSS 地址 / Apple Podcasts 链接</label>
+    <input type="text" id="sourceInput" placeholder="B站：合集页链接（含 sid=）、合集里单个视频的链接或 BV 号（自动识别整个合集）、多P视频链接、纯数字 season_id；播客：RSS 地址或 Apple Podcasts 节目链接">
     <div id="cookieRow" hidden>
       <label for="cookieInput">B站 Cookie（至少含 SESSDATA；未登录拿不到字幕列表。也可改用环境变量 BILI_COOKIE）</label>
       <input type="password" id="cookieInput" placeholder="粘贴浏览器复制的整串 Cookie，仅本次运行使用，不落盘、不写日志。只复制 SESSDATA 的值也可以">
@@ -509,7 +509,7 @@ function collectTarget(startBody) {
   if ($("modeDemo").checked) return true;
   const source = $("sourceInput").value.trim();
   if (!source) {
-    showError("请输入合集页链接（含 sid= 参数）、视频链接或 BV 号、多P视频链接、或纯数字 season_id");
+    showError("请输入B站合集链接（含 sid= 参数）、视频链接或 BV 号，或播客 RSS 地址 / Apple Podcasts 链接");
     $("sourceInput").focus();
     return false;
   }

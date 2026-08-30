@@ -13,12 +13,18 @@ from pydantic import BaseModel, Field
 
 # ---- 领域模型（跨层流转的数据） ----
 class Episode(BaseModel):
-    """合集内的一集。cid 取字幕前可能未知（需 pagelist 补齐）。"""
+    """合集内的一集。cid 取字幕前可能未知（需 pagelist 补齐）。
+
+    source_url / transcript_url 是跨平台通用字段（播客等复用 Episode），
+    B站路径不使用、保持默认值。
+    """
 
     bvid: str
     cid: str | None = None
     title: str
     index: int  # 合集内序号，从 1 开始
+    source_url: str = ""  # 单集页面链接（属性头 source 优先取它）
+    transcript_url: str | None = None  # 现成文稿地址（播客；B站不使用）
 
 
 class SubtitleLine(BaseModel):

@@ -90,6 +90,7 @@ def write_collection_index(
     season_id: str | None,
     fetched_at: date,
     log: Callable[[str], None] = print,
+    base_tag: str = notes.BASE_TAG,
 ) -> Path | None:
     """重生成合集索引页：条目从磁盘实况收集，保证双链与文件名永远一致
     （开发计划 §2.3）。合集目录尚不存在时跳过；每次整页覆盖重写。
@@ -113,7 +114,7 @@ def write_collection_index(
     ]
     index_name = f"{index_stem}.md"
     path = collection_dir / index_name
-    content = notes.build_index_note(collection_name, season_id, entries, fetched_at)
+    content = notes.build_index_note(collection_name, season_id, entries, fetched_at, base_tag)
     write_markdown(path, content, overwrite=True)
     log(f"索引页已更新：{index_name}（{len(entries)} 集）")
     return path

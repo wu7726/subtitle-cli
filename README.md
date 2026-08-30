@@ -1,12 +1,13 @@
-# subtitle-cli —— B站合集字幕提取器
+# subtitle-cli —— B站合集 / 播客字幕提取器
 
-输入一个B站合集链接（或合集里任意一个视频链接），一次性提取该合集**全部分集**的字幕（CC 字幕 + AI 字幕），输出为可直接阅读的 Markdown 笔记，**直接写入 Obsidian vault**，形成可搜索、可双链跳转的知识库。适合看完合集后做笔记、喂给 AI 总结、离线阅读。
+输入一个B站合集链接（或合集里任意一个视频链接），一次性提取该合集**全部分集**的字幕（CC 字幕 + AI 字幕）；或输入一个**播客 RSS 地址 / Apple Podcasts 节目链接**，提取各单集的现成文稿。输出为可直接阅读的 Markdown 笔记，**直接写入 Obsidian vault**，形成可搜索、可双链跳转的知识库。适合看完合集后做笔记、喂给 AI 总结、离线阅读。
 
 > 定位：个人学习用途的轻量命令行工具，仅供个人使用。PRD 见 `PRD.md`。
 
 ## 功能
 
 - 输入灵活：合集页 URL（含 `sid=` / `season_id=`）、**合集内单个视频的链接或 BV 号**（自动识别所属合集）、**多P视频链接**（视频选集 N/M 形态，按分P批量提取）、纯数字 season_id
+- **播客支持**：RSS 地址或 Apple Podcasts 节目链接 → 按发布时间正序编号提取各单集**现成文稿**（RSS 的 `podcast:transcript` 标签，支持 VTT/SRT/JSON/纯文本/HTML），笔记默认落 vault 的 `播客字幕/` 文件夹（可用 `--vault-subdir` 改）；没有文稿的单集归入「无字幕」。**注意**：实测中文播客极少数提供文稿标签（抽样 40 个热门节目为 0），英文播客覆盖较好；小宇宙网页端不公开 RSS，请从 App「复制 RSS 链接」后粘贴。多平台扩展的后续计划（语音转写、抖音等）见 `docs/多平台扩展计划.md`
 - 自动翻页遍历全部分集，长合集（几十上百集）完整提取
 - 逐集获取字幕并选轨：人工 CC（zh-CN）优先，其次 AI 字幕（ai-zh），再退列表第一个
 - 输出纯文本 Markdown：分段拼好的自然段落，无时间轴
@@ -70,6 +71,11 @@ subtitle-cli <合集URL或season_id> --output D:/字幕/
 # 传入 B站 Cookie（AI/CC 字幕列表需要登录态，见下文）
 subtitle-cli <合集URL或season_id> --cookie "SESSDATA=..."
 
+# 播客：RSS 地址或 Apple Podcasts 节目链接（不需要 Cookie）
+subtitle-cli "https://example.com/feed.xml" --vault "D:/Obsidian/MyVault"
+subtitle-cli "https://podcasts.apple.com/cn/podcast/xxx/id123456" --vault "D:/Obsidian/MyVault"
+subtitle-cli "https://example.com/feed.xml" --vault "D:/Obsidian/MyVault" --vault-subdir "学习/播客"
+
 # 旧字幕迁移：把 output/ 里的已有合集转换成新格式写入 vault（不联网）
 subtitle-cli-migrate "output" --vault "D:/Obsidian/MyVault"
 subtitle-cli-migrate "output" --vault "D:/Obsidian/MyVault" --dry-run   # 只看计划不写盘
@@ -96,12 +102,16 @@ vault 模式（`--vault` 或网页配置）：
 
 ```
 <vault>/
-└── B站字幕/                    # vault 内字幕文件夹，可改可嵌套
+└── B站字幕/                    # B站笔记，可改可嵌套（--vault-subdir）
     └── <合集名>/
         ├── <合集名>.md          # 合集索引页：双链到全部分集
         ├── EP01 第一集标题.md    # 每集笔记
         ├── EP02 第二集标题.md
         └── ...
+└── 播客字幕/                    # 播客笔记（CLI 默认目录，网页沿用界面里的字幕文件夹设置）
+    └── <播客名>/
+        ├── <播客名>.md          # 索引页（不写 season_id）
+        └── EPNN 单集标题.md     # 有现成文稿的单集
 ```
 
 普通文件夹模式（`--output`）结构相同，只是没有属性头与索引页。

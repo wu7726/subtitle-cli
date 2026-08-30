@@ -44,6 +44,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from subtitle_cli import storage  # noqa: E402
 from subtitle_cli.bilibili.client import BilibiliClient, normalize_cookie  # noqa: E402
 from subtitle_cli.bilibili.models import EpisodeStatus  # noqa: E402
+from subtitle_cli.dispatch import BILIBILI, PODCAST, create_client, detect_platform  # noqa: E402
 from subtitle_cli.migration import (  # noqa: E402
     format_migration_summary,
     migrate,
@@ -133,9 +134,9 @@ def _badge_files_extract(outcome, output_dir: Path) -> list[dict]:
     return files
 
 
-def _vault_rel_index_path(cfg, collection_name: str) -> str:
+def _vault_rel_index_path(subdir: str, collection_name: str) -> str:
     coll = storage.collection_dirname(collection_name)
-    sub = Path(cfg.subdir.strip() or ".")
+    sub = Path(subdir.strip() or ".")
     return (sub / coll / coll).as_posix()
 
 
@@ -186,7 +187,11 @@ def run_extract_job(
     vault_subdir: str = "",
 ) -> None:
     try:
-        if not demo and cookie:
+        platform = detect_platform(source)
+        if demo and platform == PODCAST:
+            _finish_error("演示模式使用内置B站示例数据，仅支持B站输入。", 2)
+            return
+        if not demo and platform == BILIBILI and cookie:
             cookie, cookie_note = normalize_cookie(cookie)
             if cookie_note:
                 _log(cookie_note)
@@ -201,7 +206,7 @@ def run_extract_job(
             start_demo()
             source = (source or "").strip() or DEMO_SOURCE
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-        with BilibiliClient(cookie=cookie or None) as client:
+        with create_client(source, cookie or None) as client:
             outcome = run_collection(
                 source, Path(output_dir), client, log=_log, note_mode=note_mode
             )
@@ -210,11 +215,9 @@ def run_extract_job(
         STATE["collection_name"] = outcome.collection_name
         STATE["files"] = _badge_files_extract(outcome, Path(output_dir))
         if note_mode == "obsidian" and vault_path:
-            cfg = load_config()
-            if vault_subdir:
-                cfg.subdir = vault_subdir
+            subdir = vault_subdir or load_config().subdir
             STATE["obsidian_open"] = _obsidian_uri(
-                vault_path, _vault_rel_index_path(cfg, outcome.collection_name)
+                vault_path, _vault_rel_index_path(subdir, outcome.collection_name)
             )
         STATE["phase"] = "done"
     except ValueError as exc:
@@ -436,7 +439,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "缺少合集链接或 season_id"}, 400)
                 return
             try:
-                if not demo and cookie:
+                platform = detect_platform(source)
+                if demo and platform == PODCAST:
+                    self._json({"error": "演示模式使用内置B站示例数据，仅支持B站输入"}, 400)
+                    return
+                if not demo and platform == BILIBILI and cookie:
                     cookie, _ = normalize_cookie(cookie)
                     if "sessdata" not in cookie.lower():
                         self._json({"error": "Cookie 中没有 SESSDATA 字段，无法获取字幕列表"}, 400)
@@ -448,7 +455,7 @@ class Handler(BaseHTTPRequestHandler):
                     start_demo()
                     source = source or DEMO_SOURCE
                 try:
-                    with BilibiliClient(cookie=cookie or None) as client:
+                    with create_client(source, cookie or None) as client:
                         result = preview_first_episode(
                             source, client, log=lambda line: lines.append(line),
                             note_mode="obsidian" if vault else "plain",
@@ -483,16 +490,28 @@ class Handler(BaseHTTPRequestHandler):
             cookie = (data.get("cookie") or "").strip() or os.environ.get("BILI_COOKIE") or ""
             vault = (data.get("vault") or "").strip()
             vault_subdir = (data.get("vault_subdir") or "").strip()
+            subdir_used = vault_subdir
             try:
+                if demo and detect_platform(source) == PODCAST:
+                    self._json({"error": "演示模式使用内置B站示例数据，仅支持B站输入"}, 400)
+                    return
                 if vault:
-                    # 传入即记住（PRD §5.1）；同时决定输出落点与笔记格式
+                    # 传入即记住（PRD §5.1）；同时决定输出落点与笔记格式。
+                    # 播客输入落 podcast_subdir，B站落 subdir，互不干扰
                     cfg = load_config()
                     cfg.vault = vault
+                    platform = detect_platform(source)
                     if vault_subdir:
-                        cfg.subdir = vault_subdir
+                        if platform == PODCAST:
+                            cfg.podcast_subdir = vault_subdir
+                        else:
+                            cfg.subdir = vault_subdir
                     save_config(cfg)
                     cfg = load_config()
-                    output = str(collection_root(cfg))
+                    subdir_used = vault_subdir or (
+                        cfg.podcast_subdir if platform == PODCAST else cfg.subdir
+                    )
+                    output = str(collection_root(cfg, subdir_used))
                     note_mode = "obsidian"
                 else:
                     output = (data.get("output") or "").strip() or str(REPO_ROOT / "output")
@@ -520,7 +539,7 @@ class Handler(BaseHTTPRequestHandler):
                 kwargs={
                     "note_mode": note_mode,
                     "vault_path": vault,
-                    "vault_subdir": vault_subdir,
+                    "vault_subdir": subdir_used,
                 },
                 daemon=True,
             ).start()

@@ -13,11 +13,13 @@ from typing import Optional
 
 import typer
 
-from .bilibili.client import BilibiliClient, BilibiliError, RiskControlError, normalize_cookie
+from .bilibili.client import RiskControlError, normalize_cookie
+from .dispatch import BILIBILI, PODCAST, create_client, detect_platform
+from .errors import PlatformError
 from .pipeline import format_preview, has_failure, preview_first_episode, run_collection, summarize
 from .vault import collection_root, load_config, save_config
 
-app = typer.Typer(add_completion=False, help="B站合集字幕提取器：输入合集或其内任一视频链接，一次性提取整个合集的字幕为 Markdown。")
+app = typer.Typer(add_completion=False, help="字幕提取器：B站合集与播客 → Obsidian 笔记。")
 
 
 def _force_utf8_stdio() -> None:
@@ -34,7 +36,8 @@ def _force_utf8_stdio() -> None:
 def main(
     source: str = typer.Argument(
         ...,
-        help="合集页 URL（含 sid= 或 season_id=）、合集内任一视频的 URL 或 BV 号（自动识别所属合集）、或纯数字 season_id",
+        help="B站：合集页 URL（含 sid= 或 season_id=）、合集内任一视频的 URL 或 BV 号、纯数字 season_id；"
+        "播客：RSS 地址或 Apple Podcasts 节目链接",
     ),
     output: Optional[Path] = typer.Option(
         None,
@@ -51,12 +54,12 @@ def main(
     vault_subdir: Optional[str] = typer.Option(
         None,
         "--vault-subdir",
-        help="vault 内字幕文件夹（默认 B站字幕，可嵌套如 学习/B站字幕）",
+        help="vault 内字幕文件夹（默认 B站字幕，可嵌套如 学习/B站字幕；播客默认 播客字幕）",
     ),
     cookie: Optional[str] = typer.Option(
         None,
         "--cookie",
-        help="B站 Cookie（至少含 SESSDATA，AI 字幕需要登录态）；也可用 BILI_COOKIE 环境变量",
+        help="B站 Cookie（至少含 SESSDATA，AI 字幕需要登录态）；也可用 BILI_COOKIE 环境变量。播客输入不需要 Cookie",
     ),
     preview: bool = typer.Option(
         False,
@@ -64,10 +67,11 @@ def main(
         help="只提取第 1 集并输出审查报告（排版与内容清洗情况），不写文件",
     ),
 ) -> None:
-    """提取B站合集全部分集的字幕，保存为 Markdown 文件。"""
+    """提取B站合集或播客的字幕，保存为 Markdown 文件。"""
     _force_utf8_stdio()
+    platform = detect_platform(source)
     cookie = cookie or os.environ.get("BILI_COOKIE") or None
-    if cookie:
+    if cookie and platform == BILIBILI:
         cookie, cookie_note = normalize_cookie(cookie)
         if cookie_note:
             typer.echo(cookie_note)
@@ -75,20 +79,26 @@ def main(
             typer.echo("无法获取字幕列表，已停止。", err=True)
             raise typer.Exit(code=2)
 
-    # 输出模式判定（开发计划 M7）：--output 显式给出 → 普通文件夹优先；
-    # 否则已配置 vault（参数 > 配置文件，显式传入即写回）→ obsidian 模式；
-    # 都没有 → 沿用旧默认（当前目录，普通输出）。
+    # 输出模式判定（开发计划 M7 + 播客分目录）：--output 显式给出 → 普通文件夹
+    # 优先；否则已配置 vault（参数 > 配置文件，显式传入即写回）→ obsidian 模式；
+    # 都没有 → 沿用旧默认（当前目录，普通输出）。播客落 podcast_subdir。
     if vault or vault_subdir:
         cfg = load_config()
         if vault:
             cfg.vault = vault
         if vault_subdir:
-            cfg.subdir = vault_subdir
+            if platform == PODCAST:
+                cfg.podcast_subdir = vault_subdir
+            else:
+                cfg.subdir = vault_subdir
         save_config(cfg)
     cfg = load_config()
     if output is None and cfg.vault.strip():
         note_mode = "obsidian"
-        output = collection_root(cfg)
+        subdir = vault_subdir or (
+            cfg.podcast_subdir if platform == PODCAST else cfg.subdir
+        )
+        output = collection_root(cfg, subdir)
     else:
         note_mode = "plain"
         output = output if output is not None else Path(".")
@@ -100,7 +110,7 @@ def main(
         raise typer.Exit(code=2) from None
 
     try:
-        with BilibiliClient(cookie=cookie) as client:
+        with create_client(source, cookie) as client:
             if preview:
                 result = preview_first_episode(
                     source, client, log=typer.echo, note_mode=note_mode
@@ -116,7 +126,7 @@ def main(
     except RiskControlError as exc:
         typer.echo(f"触发风控，已停止：{exc}\n稍后重跑同一条命令，已成功的分集会自动跳过。", err=True)
         raise typer.Exit(code=1) from None
-    except BilibiliError as exc:
+    except PlatformError as exc:
         typer.echo(f"提取失败：{exc}", err=True)
         raise typer.Exit(code=1) from None
     except KeyboardInterrupt:

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0">
+  <channel>
+    <title>示例播客·离线调试</title>
+    <itunes:author>主播小张</itunes:author>
+    <item>
+      <title>EP03 最新的话题</title>
+      <guid>https://example.com/episodes/3</guid>
+      <link>https://example.com/episodes/3</link>
+      <pubDate>Wed, 04 Mar 2026 10:00:00 +0800</pubDate>
+      <enclosure url="https://example.com/audio/ep3.mp3" length="1" type="audio/mpeg"/>
+      <podcast:transcript url="https://example.com/transcripts/ep3.en.srt" type="application/srt" lang="en"/>
+      <podcast:transcript url="https://example.com/transcripts/ep3.html" type="text/html" lang="zh"/>
+    </item>
+    <item>
+      <title>EP02 中间的一集</title>
+      <guid>https://example.com/episodes/2</guid>
+      <link>https://example.com/episodes/2</link>
+      <pubDate>Wed, 25 Feb 2026 10:00:00 +0800</pubDate>
+      <enclosure url="https://example.com/audio/ep2.m4a" length="1" type="audio/x-m4a"/>
+      <podcast:transcript url="https://example.com/transcripts/ep2.vtt" type="text/vtt" lang="zh"/>
+    </item>
+    <item>
+      <title>EP01 最早的一集</title>
+      <guid>ep1-unique-id</guid>
+      <link>https://example.com/episodes/1</link>
+      <pubDate>Wed, 18 Feb 2026 10:00:00 +0800</pubDate>
+      <enclosure url="https://example.com/audio/ep1.mp3" length="1" type="audio/mpeg"/>
+    </item>
+  </channel>
+</rss>

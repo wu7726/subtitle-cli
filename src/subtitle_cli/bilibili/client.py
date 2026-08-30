@@ -14,6 +14,7 @@ from typing import Callable
 import httpx
 
 from .. import config
+from ..errors import PlatformError
 from .models import (
     Episode,
     PageInfo,
@@ -33,7 +34,7 @@ NAV_URL = f"{API_BASE}/x/web-interface/nav"
 VIEW_URL = f"{API_BASE}/x/web-interface/wbi/view"
 
 
-class BilibiliError(Exception):
+class BilibiliError(PlatformError):
     """接口调用失败（不可重试的业务/解析错误，或重试耗尽后的网络错误）。"""
 
 

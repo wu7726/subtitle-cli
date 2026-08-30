@@ -68,6 +68,16 @@ def test_collection_root_empty_vault_raises():
         collection_root(VaultConfig(vault="  "))
 
 
+def test_podcast_subdir_default_and_override():
+    cfg = VaultConfig(vault="D:/v")
+    assert cfg.podcast_subdir == "播客字幕"  # 旧配置文件缺该字段时回退默认
+    assert collection_root(cfg, cfg.podcast_subdir) == Path("D:/v") / "播客字幕"
+    # 显式覆盖优先（CLI --vault-subdir / 网页输入框）
+    assert collection_root(cfg, "学习/播客") == Path("D:/v") / "学习" / "播客"
+    # 不带覆盖时仍用 B站 subdir，互不影响
+    assert collection_root(cfg) == Path("D:/v") / "B站字幕"
+
+
 # ---- 三态检查 ----
 
 

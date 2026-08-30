@@ -49,9 +49,9 @@ def episode_url(bvid: str, index: int, *, is_multi_p: bool) -> str:
     return f"{url}?p={index}" if is_multi_p else url
 
 
-def episode_tags(collection: str) -> list[str]:
+def episode_tags(collection: str, base_tag: str = BASE_TAG) -> list[str]:
     """分集标签：基础标签 + 合集名（合集名为空时只留基础标签）。"""
-    return [BASE_TAG, collection] if collection.strip() else [BASE_TAG]
+    return [base_tag, collection] if collection.strip() else [base_tag]
 
 
 # 无需引号即可安全内联的标量：字母/数字/下划线/CJK（含中文标点全角区）开头，
@@ -115,6 +115,7 @@ def build_index_note(
     season_id: str | None,
     entries: list[IndexEntry],
     fetched_at: date,
+    base_tag: str = BASE_TAG,
 ) -> str:
     """合集索引页：type: index + 全部分集双链。条目由调用方从磁盘实况生成。"""
     lines = [
@@ -129,7 +130,7 @@ def build_index_note(
             f"updated: {fetched_at.isoformat()}",
         ]
     )
-    lines.extend(_tag_lines([BASE_TAG, INDEX_TAG]))
+    lines.extend(_tag_lines([base_tag, INDEX_TAG]))
     lines.append("---")  # 收栏
     body = [f"# {collection}", ""]
     body.extend(f"- {wikilink(stem, alias)}" for stem, alias in entries)

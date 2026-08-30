@@ -52,7 +52,7 @@ def _patch(monkeypatch, tmp_path: Path) -> Path:
     """隔离配置文件路径并替换网络客户端。"""
     cfg_path = tmp_path / "config.json"
     monkeypatch.setattr("subtitle_cli.vault.config_path", lambda: cfg_path)
-    monkeypatch.setattr("subtitle_cli.cli.BilibiliClient", FakeNetClient)
+    monkeypatch.setattr("subtitle_cli.cli.create_client", lambda raw, cookie=None: FakeNetClient(cookie))
     return cfg_path
 
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 DEFAULT_SUBDIR = "B站字幕"
+DEFAULT_PODCAST_SUBDIR = "播客字幕"
 _OBSIDIAN_DIR = ".obsidian"
 _PROBE_NAME = ".subtitle-cli-write-probe"
 
@@ -22,6 +23,7 @@ class VaultConfig(BaseModel):
 
     vault: str = ""
     subdir: str = DEFAULT_SUBDIR
+    podcast_subdir: str = DEFAULT_PODCAST_SUBDIR  # 播客笔记落点（CLI 未显式指定时使用）
 
 
 class VaultCheckStatus(BaseModel):
@@ -65,15 +67,16 @@ def save_config(cfg: VaultConfig, path: Path | None = None) -> None:
     tmp.replace(target)
 
 
-def collection_root(cfg: VaultConfig) -> Path:
-    """笔记落点：<vault>/<subdir>（subdir 支持嵌套，如 学习/B站字幕）。"""
+def collection_root(cfg: VaultConfig, subdir: str | None = None) -> Path:
+    """笔记落点：<vault>/<subdir>（默认取 cfg.subdir；播客等可显式覆盖，
+    subdir 支持嵌套，如 学习/播客字幕）。"""
     vault = cfg.vault.strip()
     if not vault:
         raise ValueError(
             "尚未配置 vault 路径：请先用 --vault 指定一次（会记住），"
             "或改用 --output 输出到普通文件夹。"
         )
-    sub = cfg.subdir.strip()
+    sub = (subdir if subdir is not None else cfg.subdir).strip()
     return Path(vault).expanduser() / (sub or ".")
 
 

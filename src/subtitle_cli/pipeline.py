@@ -16,6 +16,7 @@ from .bilibili.client import BilibiliError, RiskControlError
 from .bilibili.models import Episode, EpisodeResult, EpisodeStatus, SubtitleTrack
 from .config import RISK_ABORT_THRESHOLD
 from .converter import subtitle_to_markdown
+from .errors import PlatformError
 from .reviewer import AuditReport, CleaningStats, audit_markdown, clean_lines, format_report
 
 
@@ -82,6 +83,11 @@ def _check_login(client: PlatformClient, log: Callable[[str], None]) -> None:
         )
 
 
+def _base_tag_of(client: PlatformClient) -> str:
+    """平台基础标签（播客「播客字幕」；未声明的实现回落B站标签）。"""
+    return getattr(client, "base_tag", "") or notes.BASE_TAG
+
+
 def episode_heading(episode: Episode) -> str:
     """Markdown 一级标题：第{N}集 标题；标题自带该序号前缀时不重复。"""
     prefix = f"第{episode.index}集"
@@ -144,6 +150,12 @@ def run_collection(
             results.append(EpisodeResult(episode=episode, status=EpisodeStatus.FAILED, reason=str(exc)))
             log(f"{label} 失败：{exc}")
             continue
+        except PlatformError as exc:
+            # 非B站平台（播客等）的接口错误，按普通失败处理
+            consecutive_risk = 0
+            results.append(EpisodeResult(episode=episode, status=EpisodeStatus.FAILED, reason=str(exc)))
+            log(f"{label} 失败：{exc}")
+            continue
 
         consecutive_risk = 0
         if track is None:
@@ -158,7 +170,11 @@ def run_collection(
         content = body
         if note_mode == "obsidian":
             content = notes.build_episode_note(
-                _episode_meta(collection_name, season_id, episode, fetched, author), body
+                _episode_meta(
+                    collection_name, season_id, episode, fetched, author,
+                    base_tag=_base_tag_of(client),
+                ),
+                body,
             )
         reports.append(audit_markdown(body, cleaning))
         try:
@@ -175,12 +191,15 @@ def run_collection(
 
     index_path = None
     if note_mode == "obsidian":
+        # 多P（BV 开头）与播客（feed 地址）不写 season_id 进索引页
+        index_season = season_id if season_id.isdigit() else None
         index_path = storage.write_collection_index(
             Path(output_dir) / storage.collection_dirname(collection_name),
             collection_name,
-            None if season_id.startswith("BV") else season_id,
+            index_season,
             fetched,
             log,
+            base_tag=_base_tag_of(client),
         )
 
     unprocessed = len(episodes) - len(results)
@@ -218,18 +237,23 @@ def _episode_meta(
     episode: Episode,
     fetched: date,
     author: str = "",
+    base_tag: str = notes.BASE_TAG,
 ) -> notes.EpisodeMeta:
     """一集的属性头来源；多P 以 season_id 以 BV 开头为判定（开发计划 §2.1）。
 
     属性键对齐 Obsidian Web Clipper 模板：author/created/source/tags/title。
+    播客等自带单集链接的平台优先用 episode.source_url。
     """
     is_multi_p = season_id.startswith("BV")
+    source = episode.source_url or notes.episode_url(
+        episode.bvid, episode.index, is_multi_p=is_multi_p
+    )
     return notes.EpisodeMeta(
         title=episode_heading(episode),
-        source=notes.episode_url(episode.bvid, episode.index, is_multi_p=is_multi_p),
+        source=source,
         author=author,
         created=fetched,
-        tags=notes.episode_tags(collection_name),
+        tags=notes.episode_tags(collection_name, base_tag),
         collection=collection_name,
     )
 
@@ -323,6 +347,7 @@ def preview_first_episode(
         meta = _episode_meta(
             collection_name, season_id, first, date.today(),
             _uploader_of(client, episodes),
+            base_tag=_base_tag_of(client),
         )
         markdown = notes.build_episode_note(meta, body)
     audit = audit_markdown(body, cleaning)
