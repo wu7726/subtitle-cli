@@ -75,6 +75,7 @@ class BilibiliClient:
         self._sleep = sleep or time.sleep
         self._now = now or (lambda: int(time.time()))
         self._wbi_keys: tuple[str, str] | None = None
+        self._view_cache: dict[str, ViewData] = {}
 
     # ---- 生命周期 ----
     def close(self) -> None:
@@ -88,12 +89,15 @@ class BilibiliClient:
 
     # ---- PlatformClient 协议 ----
     def resolve_input(self, raw: str) -> str:
-        """URL、BV 号或纯数字 → season_id；其余报错。
+        """URL、BV 号或纯数字 → 集合标识；其余报错。
 
         识别顺序（技术方案 §6 输入解析规则）：
         1. 纯数字 → 直接作为 season_id；
         2. 链接中含 sid= / season_id= → 提取该值（合集页链接）；
-        3. 含 BV 号（视频页 URL 或裸 BV 号）→ 调 view 接口查所属合集；
+        3. 含 BV 号（视频页 URL 或裸 BV 号）→ 调 view 接口：
+           - 属于 UGC 合集 → 返回 season_id；
+           - 属于多P视频（videos > 1）→ 返回 bvid 本身，按分P批量提取；
+           - 单P且无合集 → 报错；
         4. 其余 → 报错。
         """
         text = (raw or "").strip()
@@ -104,30 +108,46 @@ class BilibiliClient:
             return match.group(1)
         bvid = extract_bvid(text)
         if bvid:
-            return self.fetch_season_id_by_bvid(bvid)
+            return self._resolve_bvid(bvid)
         raise ValueError(
             f"无法从输入中识别合集：{text[:80]!r}。支持合集页链接（含 sid= 或 "
-            f"season_id= 参数）、合集内单个视频的链接或 BV 号、纯数字 season_id。"
-            f"b23.tv 短链暂不支持，请先在浏览器中打开并复制完整链接。"
+            f"season_id= 参数）、合集内单个视频或多P视频的链接或 BV 号、"
+            f"纯数字 season_id。b23.tv 短链暂不支持，请先在浏览器中打开并复制完整链接。"
         )
+
+    def _resolve_bvid(self, bvid: str) -> str:
+        view = self._fetch_view(bvid)
+        if view.ugc_season and view.ugc_season.id:
+            return str(view.ugc_season.id)
+        if view.videos > 1:
+            return bvid  # 多P视频：以 bvid 作为集合标识，按分P提取
+        raise ValueError(
+            f"视频 {bvid} 是单P视频且不属于任何合集，没有可批量提取的内容。"
+        )
+
+    def _fetch_view(self, bvid: str) -> ViewData:
+        """view 接口查询（带缓存，resolve 与 list_episodes 共用）。"""
+        if bvid not in self._view_cache:
+            try:
+                payload = self._api_get(
+                    VIEW_URL,
+                    params={"bvid": bvid},
+                    signed=True,
+                    delay_range=config.LIST_DELAY_RANGE,
+                )
+            except RiskControlError:
+                raise
+            except BilibiliError as exc:
+                raise BilibiliError(f"查询视频 {bvid} 信息失败：{exc}") from exc
+            self._view_cache[bvid] = ViewData.model_validate(payload.get("data") or {})
+        return self._view_cache[bvid]
 
     def fetch_season_id_by_bvid(self, bvid: str) -> str:
         """单个视频 → 所属合集 season_id（view 接口的 ugc_season 字段）。
 
-        视频不属于任何合集时抛 ValueError（输入无法解析为合集）。
+        视频不属于任何合集时抛 ValueError（多P视频除外，见 _resolve_bvid）。
         """
-        try:
-            payload = self._api_get(
-                VIEW_URL,
-                params={"bvid": bvid},
-                signed=True,
-                delay_range=config.LIST_DELAY_RANGE,
-            )
-        except RiskControlError:
-            raise
-        except BilibiliError as exc:
-            raise BilibiliError(f"查询视频 {bvid} 信息失败：{exc}") from exc
-        view = ViewData.model_validate(payload.get("data") or {})
+        view = self._fetch_view(bvid)
         season = view.ugc_season
         if season is None or not season.id:
             raise ValueError(
@@ -137,7 +157,39 @@ class BilibiliClient:
         return str(season.id)
 
     def list_episodes(self, season_id: str) -> tuple[str, list[Episode]]:
-        """翻页取全量分集，返回（合集名, 分集列表）。
+        """取全部"集"，返回（集合名, 分集列表）。
+
+        - season_id（纯数字）：UGC 合集，翻页取全量；
+        - bvid（BV 开头）：多P视频，pagelist 的每个分P视作一集（cid 直接可得）。
+        """
+        if season_id.startswith("BV"):
+            return self._list_parts(season_id)
+        return self._list_season_episodes(season_id)
+
+    def _list_parts(self, bvid: str) -> tuple[str, list[Episode]]:
+        """多P视频：pagelist 全量分P → Episode 列表。"""
+        view = self._fetch_view(bvid)
+        payload = self._api_get(
+            PAGELIST_URL,
+            params={"bvid": bvid},
+            delay_range=config.LIST_DELAY_RANGE,
+        )
+        pages = [PageInfo.model_validate(p) for p in (payload.get("data") or [])]
+        if not pages:
+            raise BilibiliError(f"pagelist 未返回任何分P：{bvid}")
+        episodes = [
+            Episode(
+                bvid=bvid,
+                cid=str(p.cid),
+                title=p.part or f"P{p.page}",
+                index=p.page,
+            )
+            for p in pages
+        ]
+        return view.title or bvid, episodes
+
+    def _list_season_episodes(self, season_id: str) -> tuple[str, list[Episode]]:
+        """UGC 合集：翻页取全量分集。
 
         终止条件（任一满足）：达 total；返回空页；整页都与已收集内容重复
         （服务端忽略 page_num 时防死循环；服务端压缩 page_size 时也能翻完）。

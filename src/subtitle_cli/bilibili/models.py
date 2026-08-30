@@ -108,4 +108,6 @@ class ViewData(BaseModel):
     """x/web-interface/wbi/view 的 data 部分（只声明用到的字段）。"""
 
     bvid: str = ""
+    title: str = ""
+    videos: int = 1  # 分P数量
     ugc_season: UgcSeason | None = None

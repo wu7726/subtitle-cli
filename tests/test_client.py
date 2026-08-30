@@ -390,13 +390,45 @@ def test_resolve_input_bare_bvid(load_fixture):
         assert h.client.resolve_input("BV17TtA6VEuH") == "8016518"
 
 
-def test_resolve_bvid_without_season_raises_value_error():
-    """视频不属于任何合集 → ValueError（无法解析为合集）。"""
-    payload = {"code": 0, "data": {"bvid": "BV1xx411c7mD"}}
+def test_resolve_bvid_single_part_no_season_raises_value_error():
+    """单P视频且不属于任何合集 → ValueError（没有可批量提取的内容）。"""
+    payload = {"code": 0, "data": {"bvid": "BV1xx411c7mD", "videos": 1}}
 
     with ClientHarness(lambda req: httpx.Response(200, json=payload)) as h:
-        with pytest.raises(ValueError, match="不属于任何合集"):
+        with pytest.raises(ValueError, match="单P视频且不属于任何合集"):
             h.client.resolve_input("BV1xx411c7mD")
+
+
+def test_resolve_and_list_multi_part_video():
+    """多P视频（非合集体系）：resolve 返回 bvid，每个分P视作一集。"""
+    view = {"code": 0, "data": {"bvid": "BV1DE0000001", "title": "示例多P课程", "videos": 3}}
+    pagelist = {
+        "code": 0,
+        "data": [
+            {"cid": 101, "page": 1, "part": "第一讲 认识C语言"},
+            {"cid": 102, "page": 2, "part": "第二讲 编译器选择"},
+            {"cid": 103, "page": 3, "part": ""},
+        ],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "wbi/view" in request.url.path:
+            return httpx.Response(200, json=view)
+        if "pagelist" in request.url.path:
+            return httpx.Response(200, json=pagelist)
+        return httpx.Response(200, json={"code": 0, "data": {"subtitle": {"subtitles": []}}})
+
+    with ClientHarness(handler) as h:
+        ident = h.client.resolve_input("BV1DE0000001")
+        assert ident == "BV1DE0000001"  # bvid 作为集合标识
+        name, episodes = h.client.list_episodes(ident)
+        assert name == "示例多P课程"
+        assert [e.index for e in episodes] == [1, 2, 3]
+        assert episodes[0].cid == "101" and episodes[0].title == "第一讲 认识C语言"
+        assert episodes[2].title == "P3"  # 空 part 回退
+        assert all(e.bvid == "BV1DE0000001" for e in episodes)
+        # resolve 与 list_episodes 共享 view 缓存，只查询一次
+        assert len([r for r in h.requests if "wbi/view" in r.url.path]) == 1
 
 
 def test_resolve_bvid_video_not_found_wraps_error():
