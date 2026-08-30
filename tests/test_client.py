@@ -364,3 +364,59 @@ def test_wbi_keys_cached_across_requests(episode):
 
     nav_requests = [r for r in h.requests if "nav" in r.url.path]
     assert len(nav_requests) == 1  # 密钥进程内缓存，只取一次
+
+
+# ---- BV 号 / 视频链接 → 所属合集 ----
+def test_resolve_input_bvid_looks_up_season(load_fixture):
+    """视频页 URL / 裸 BV 号 → view 接口查 ugc_season → season_id。"""
+    view_payload = load_fixture("view_ugc_season.json")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "wbi/view" in request.url.path
+        return httpx.Response(200, json=view_payload)
+
+    with ClientHarness(handler) as h:
+        season_id = h.client.resolve_input("https://www.bilibili.com/video/BV17TtA6VEuH/?p=1")
+        assert season_id == "8016518"
+        # 先 nav 取密钥，再发起已签名的 view 请求
+        assert [("nav" in r.url.path, "wbi/view" in r.url.path) for r in h.requests] == [(True, False), (False, True)]
+        assert "w_rid" in h.params_of(h.requests[1])
+
+
+def test_resolve_input_bare_bvid(load_fixture):
+    view_payload = load_fixture("view_ugc_season.json")
+
+    with ClientHarness(lambda req: httpx.Response(200, json=view_payload)) as h:
+        assert h.client.resolve_input("BV17TtA6VEuH") == "8016518"
+
+
+def test_resolve_bvid_without_season_raises_value_error():
+    """视频不属于任何合集 → ValueError（无法解析为合集）。"""
+    payload = {"code": 0, "data": {"bvid": "BV1xx411c7mD"}}
+
+    with ClientHarness(lambda req: httpx.Response(200, json=payload)) as h:
+        with pytest.raises(ValueError, match="不属于任何合集"):
+            h.client.resolve_input("BV1xx411c7mD")
+
+
+def test_resolve_bvid_video_not_found_wraps_error():
+    """视频不存在（业务码 -404）→ 包装为带上下文的 BilibiliError。"""
+    payload = {"code": -404, "message": "啥都木有"}
+
+    with ClientHarness(lambda req: httpx.Response(200, json=payload)) as h:
+        with pytest.raises(BilibiliError, match="查询视频 BV1xx411c7mD 信息失败"):
+            h.client.resolve_input("BV1xx411c7mD")
+
+
+def test_resolve_bvid_risk_control_stays_risk_error():
+    """view 被风控时保持 RiskControlError 语义（不丢失给上层）。"""
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(412, text="risk")
+
+    with ClientHarness(handler) as h:
+        with pytest.raises(RiskControlError):
+            h.client.resolve_input("BV1xx411c7mD")
+    assert calls["n"] == 4  # 初始 + 3 次退避重试

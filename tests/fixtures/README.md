@@ -8,6 +8,7 @@
 | `seasons_archives_list_p1_size20.json` | 同上，`page_size=20` | 分页遍历测试第 1 页 | 实测录制 |
 | `seasons_archives_list_p2_size20.json` | 同上，`page_num=2` | 分页遍历测试第 2 页 | 实测录制 |
 | `pagelist.json` | `x/player/pagelist?bvid=BV17TtA6VEuH` | 取 cid | 实测录制 |
+| `view_ugc_season.json` | `x/web-interface/wbi/view?bvid=BV17TtA6VEuH`（已签名） | BV 号反查所属合集（`ugc_season.id`） | 实测录制 |
 | `player_v2_nocookie.json` | `x/player/wbi/v2`（已签名、未登录） | 无字幕分支（未登录时 subtitles 恒为空） | 实测录制 |
 | `subtitle.json` | 字幕 JSON 下载 | 字幕行解析、converter 段落规则 | **构造**（见下） |
 

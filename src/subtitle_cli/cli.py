@@ -13,10 +13,10 @@ from typing import Optional
 
 import typer
 
-from .bilibili.client import BilibiliClient
+from .bilibili.client import BilibiliClient, BilibiliError, RiskControlError
 from .pipeline import has_failure, run_collection, summarize
 
-app = typer.Typer(add_completion=False, help="B站合集字幕提取器：输入合集链接，一次性提取全部分集字幕为 Markdown。")
+app = typer.Typer(add_completion=False, help="B站合集字幕提取器：输入合集或其内任一视频链接，一次性提取整个合集的字幕为 Markdown。")
 
 
 def _force_utf8_stdio() -> None:
@@ -31,7 +31,10 @@ def _force_utf8_stdio() -> None:
 
 @app.command()
 def main(
-    source: str = typer.Argument(..., help="B站合集页 URL（含 sid= 或 season_id= 参数）或纯数字 season_id"),
+    source: str = typer.Argument(
+        ...,
+        help="合集页 URL（含 sid= 或 season_id=）、合集内任一视频的 URL 或 BV 号（自动识别所属合集）、或纯数字 season_id",
+    ),
     output: Path = typer.Option(
         Path("."),
         "--output",
@@ -60,6 +63,12 @@ def main(
     except ValueError as exc:
         typer.echo(f"输入无效：{exc}", err=True)
         raise typer.Exit(code=2) from None
+    except RiskControlError as exc:
+        typer.echo(f"触发风控，已停止：{exc}\n稍后重跑同一条命令，已成功的分集会自动跳过。", err=True)
+        raise typer.Exit(code=1) from None
+    except BilibiliError as exc:
+        typer.echo(f"提取失败：{exc}", err=True)
+        raise typer.Exit(code=1) from None
     except KeyboardInterrupt:
         typer.echo("\n已中断。已成功分集已落盘，重跑会自动跳过。", err=True)
         raise typer.Exit(code=130) from None

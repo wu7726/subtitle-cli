@@ -18,9 +18,10 @@ def test_help_exits_zero():
 
 
 def test_invalid_input_exits_2(tmp_path: Path):
-    result = runner.invoke(app, ["BV1xx411c7mD", "--output", str(tmp_path)])
+    # 注意：BV 号输入会触发 view 接口查询（网络路径），此处用纯解析即可判定的非法输入
+    result = runner.invoke(app, ["https://www.bilibili.com/list/546195", "--output", str(tmp_path)])
     assert result.exit_code == 2
-    assert "仅支持" in result.output
+    assert "无法从输入中识别合集" in result.output
 
 
 def test_empty_input_exits_2(tmp_path: Path):

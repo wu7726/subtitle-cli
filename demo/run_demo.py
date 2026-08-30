@@ -132,7 +132,7 @@ def subtitle_payload(ep_index: int, form: str) -> dict:
 
 
 def bvid_of(index: int) -> str:
-    return f"BV1DE{index:03d}"
+    return f"BV1DE000{index:03d}"  # BV + 10 位，与真实 BV 号长度一致
 
 
 def index_of(bvid: str) -> int:

@@ -95,3 +95,17 @@ class PageInfo(BaseModel):
     cid: int
     page: int = 1
     part: str = ""
+
+
+class UgcSeason(BaseModel):
+    """view 接口返回的视频所属合集信息。"""
+
+    id: int
+    title: str = ""
+
+
+class ViewData(BaseModel):
+    """x/web-interface/wbi/view 的 data 部分（只声明用到的字段）。"""
+
+    bvid: str = ""
+    ugc_season: UgcSeason | None = None

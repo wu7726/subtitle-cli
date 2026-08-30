@@ -100,15 +100,15 @@ def test_web_ui_offline_demo_and_error_paths(tmp_path: Path):
         state = _wait_done(base)
         assert "成功 5（其中增量跳过 5）" in state["summary"]
 
-        # 真实模式 + 非法输入 → 错误信息与退出码 2
+        # 真实模式 + 非法输入（纯解析即可判定，不触网）→ 错误信息与退出码 2
         status, resp = _post(
             base, "/api/extract",
-            {"demo": False, "source": "BV1xx411c7mD", "output": str(tmp_path / "out2")},
+            {"demo": False, "source": "https://www.bilibili.com/list/546195", "output": str(tmp_path / "out2")},
         )
         assert status == 200
         state = _wait_done(base)
         assert state["phase"] == "error" and state["exit_code"] == 2
-        assert "仅支持" in (state["error"] or "")
+        assert "无法从输入中识别合集" in (state["error"] or "")
 
         # 运行中重复提交 → 409
         _post(base, "/api/extract", {"demo": True, "output": str(tmp_path / "out3")})

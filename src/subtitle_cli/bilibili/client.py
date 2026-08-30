@@ -21,6 +21,7 @@ from .models import (
     SeasonArchivesPage,
     SubtitleLine,
     SubtitleTrack,
+    ViewData,
 )
 from .wbi import sign
 
@@ -29,6 +30,7 @@ SEASON_ARCHIVES_URL = f"{API_BASE}/x/polymer/web-space/seasons_archives_list"
 PAGELIST_URL = f"{API_BASE}/x/player/pagelist"
 PLAYER_V2_URL = f"{API_BASE}/x/player/wbi/v2"
 NAV_URL = f"{API_BASE}/x/web-interface/nav"
+VIEW_URL = f"{API_BASE}/x/web-interface/wbi/view"
 
 
 class BilibiliError(Exception):
@@ -40,6 +42,12 @@ class RiskControlError(BilibiliError):
 
     pipeline 据此统计连续风控次数并在达到阈值时提前终止。
     """
+
+
+def extract_bvid(raw: str) -> str | None:
+    """从任意输入中提取 BV 号（视频页 URL 或裸 BV 号），无则返回 None。"""
+    match = re.search(r"BV[0-9A-Za-z]{10}", raw or "")
+    return match.group(0) if match else None
 
 
 class BilibiliClient:
@@ -80,17 +88,53 @@ class BilibiliClient:
 
     # ---- PlatformClient 协议 ----
     def resolve_input(self, raw: str) -> str:
-        """URL 或纯数字 → season_id；其余（含裸 BV 号）报错（产品文档非目标）。"""
+        """URL、BV 号或纯数字 → season_id；其余报错。
+
+        识别顺序（技术方案 §6 输入解析规则）：
+        1. 纯数字 → 直接作为 season_id；
+        2. 链接中含 sid= / season_id= → 提取该值（合集页链接）；
+        3. 含 BV 号（视频页 URL 或裸 BV 号）→ 调 view 接口查所属合集；
+        4. 其余 → 报错。
+        """
         text = (raw or "").strip()
         if text.isdigit():
             return text
         match = re.search(r"[?&](?:sid|season_id)=(\d+)", text)
         if match:
             return match.group(1)
+        bvid = extract_bvid(text)
+        if bvid:
+            return self.fetch_season_id_by_bvid(bvid)
         raise ValueError(
-            f"仅支持B站合集页链接（含 sid= 或 season_id= 参数）或纯数字 season_id，"
-            f"不识别输入：{text[:80]!r}。裸 BV 号暂不支持，请打开合集页后复制链接。"
+            f"无法从输入中识别合集：{text[:80]!r}。支持合集页链接（含 sid= 或 "
+            f"season_id= 参数）、合集内单个视频的链接或 BV 号、纯数字 season_id。"
+            f"b23.tv 短链暂不支持，请先在浏览器中打开并复制完整链接。"
         )
+
+    def fetch_season_id_by_bvid(self, bvid: str) -> str:
+        """单个视频 → 所属合集 season_id（view 接口的 ugc_season 字段）。
+
+        视频不属于任何合集时抛 ValueError（输入无法解析为合集）。
+        """
+        try:
+            payload = self._api_get(
+                VIEW_URL,
+                params={"bvid": bvid},
+                signed=True,
+                delay_range=config.LIST_DELAY_RANGE,
+            )
+        except RiskControlError:
+            raise
+        except BilibiliError as exc:
+            raise BilibiliError(f"查询视频 {bvid} 信息失败：{exc}") from exc
+        view = ViewData.model_validate(payload.get("data") or {})
+        season = view.ugc_season
+        if season is None or not season.id:
+            raise ValueError(
+                f"视频 {bvid} 不属于任何合集，无法批量提取。"
+                f"请改用合集页链接或 season_id。"
+            )
+        return str(season.id)
 
     def list_episodes(self, season_id: str) -> tuple[str, list[Episode]]:
         """翻页取全量分集，返回（合集名, 分集列表）。
