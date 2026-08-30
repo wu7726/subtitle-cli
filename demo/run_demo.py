@@ -37,6 +37,7 @@ from typer.testing import CliRunner  # noqa: E402
 
 COLLECTION_NAME = "示例合集·美食漫谈"
 SEASON_ID = "888888"
+DEMO_SOURCE = f"https://space.bilibili.com/1000/channel/collectiondetail?sid={SEASON_ID}"
 
 # (序号, 标题, 段落文本, 字幕形态)：form = "cc" | "ai" | None
 EPISODES: list[tuple[int, str, list[str], str | None]] = [
@@ -235,6 +236,36 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
 
 
 # ---- 运行 ----
+def patch_client_to(base: str, *, speedup: bool = True):
+    """把接口层指向指定 base（Mock 服务），返回恢复函数。
+
+    speedup=True 时压缩随机间隔（演示模式）；真实运行保持 config 默认值。
+    """
+    originals = [
+        (client_module, "API_BASE", client_module.API_BASE),
+        (client_module, "SEASON_ARCHIVES_URL", client_module.SEASON_ARCHIVES_URL),
+        (client_module, "PAGELIST_URL", client_module.PAGELIST_URL),
+        (client_module, "PLAYER_V2_URL", client_module.PLAYER_V2_URL),
+        (client_module, "NAV_URL", client_module.NAV_URL),
+        (config, "LIST_DELAY_RANGE", config.LIST_DELAY_RANGE),
+        (config, "MEDIA_DELAY_RANGE", config.MEDIA_DELAY_RANGE),
+    ]
+    client_module.API_BASE = base
+    client_module.SEASON_ARCHIVES_URL = f"{base}/x/polymer/web-space/seasons_archives_list"
+    client_module.PAGELIST_URL = f"{base}/x/player/pagelist"
+    client_module.PLAYER_V2_URL = f"{base}/x/player/wbi/v2"
+    client_module.NAV_URL = f"{base}/x/web-interface/nav"
+    if speedup:
+        config.LIST_DELAY_RANGE = (0.02, 0.06)
+        config.MEDIA_DELAY_RANGE = (0.03, 0.09)
+
+    def restore() -> None:
+        for obj, attr, value in originals:
+            setattr(obj, attr, value)
+
+    return restore
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="subtitle-cli 离线演示")
     parser.add_argument("--output", default=str(REPO_ROOT / "demo_output"), help="输出目录")
@@ -244,17 +275,9 @@ def main() -> None:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
+    restore = patch_client_to(base)
 
-    # 把接口层指向本地 Mock；演示模式加速请求间隔（真实运行用 config 里的 0.5~3s）
-    client_module.API_BASE = base
-    client_module.SEASON_ARCHIVES_URL = f"{base}/x/polymer/web-space/seasons_archives_list"
-    client_module.PAGELIST_URL = f"{base}/x/player/pagelist"
-    client_module.PLAYER_V2_URL = f"{base}/x/player/wbi/v2"
-    client_module.NAV_URL = f"{base}/x/web-interface/nav"
-    config.LIST_DELAY_RANGE = (0.02, 0.06)
-    config.MEDIA_DELAY_RANGE = (0.03, 0.09)
-
-    source = f"https://space.bilibili.com/1000/channel/collectiondetail?sid={SEASON_ID}"
+    source = DEMO_SOURCE
     runner = CliRunner()
     try:
         print(f"Mock 接口已启动：{base}")
@@ -270,6 +293,7 @@ def main() -> None:
         result2 = runner.invoke(app, [source, "--output", args.output])
         print(result2.output)
     finally:
+        restore()
         server.shutdown()
         server.server_close()
 

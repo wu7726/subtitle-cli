@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B站合集字幕提取器</title>
+<style>
+  :root {
+    --pink: #fb7299; --blue: #00a1d6; --bg: #f4f6f9; --card: #ffffff;
+    --text: #1f2328; --muted: #6b7280; --border: #e5e7eb;
+    --ok: #16a34a; --skip: #2563eb; --nosub: #d97706; --fail: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header { background: linear-gradient(135deg, var(--pink), var(--blue)); color: #fff; padding: 26px 20px; }
+  header .wrap { max-width: 880px; margin: 0 auto; }
+  header h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: .5px; }
+  header p { margin: 0; opacity: .92; font-size: 13px; }
+  main { max-width: 880px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .card h2 { margin: 0 0 14px; font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .card h2::before { content: ""; width: 4px; height: 16px; border-radius: 2px; background: var(--pink); }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+  label:first-of-type { margin-top: 0; }
+  input[type=text], input[type=password] {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; font-family: inherit; outline: none; background: #fafbfc;
+  }
+  input:focus { border-color: var(--blue); background: #fff; }
+  input:disabled { background: #f0f1f3; color: var(--muted); }
+  .modes { display: flex; gap: 10px; margin-bottom: 4px; }
+  .modes label {
+    flex: 1; display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px;
+    border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; color: var(--text); font-size: 13px;
+  }
+  .modes label:has(input:checked) { border-color: var(--blue); background: #f0faff; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
+  .row-btn { margin-top: 16px; display: flex; align-items: center; gap: 12px; }
+  #startBtn {
+    background: var(--pink); border: none; color: #fff; font-size: 15px; font-weight: 600;
+    padding: 10px 28px; border-radius: 999px; cursor: pointer; font-family: inherit;
+  }
+  #startBtn:hover { filter: brightness(1.05); }
+  #startBtn:disabled { opacity: .55; cursor: not-allowed; }
+  #busy { display: none; color: var(--blue); font-size: 13px; }
+  #busy::before { content: "⏳ "; }
+  .log { max-height: 300px; overflow-y: auto; font-family: Consolas, "Courier New", monospace; font-size: 13px; line-height: 1.9; background: #0f172a; color: #d7e3f4; border-radius: 10px; padding: 12px 14px; }
+  .log .ok { color: #4ade80; } .log .skip { color: #60a5fa; } .log .nosub { color: #fbbf24; } .log .fail { color: #f87171; } .log .info { color: #94a3b8; }
+  #summaryText { font-family: Consolas, "Courier New", monospace; font-size: 13.5px; line-height: 1.9; white-space: pre-wrap; margin: 0; }
+  .badge { display: inline-block; padding: 2px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .badge.b0 { background: #dcfce7; color: var(--ok); }
+  .badge.b1 { background: #fee2e2; color: var(--fail); }
+  .badge.b2 { background: #e5e7eb; color: var(--muted); }
+  .filebtn {
+    display: inline-block; margin: 0 8px 8px 0; padding: 7px 14px; border: 1px solid var(--border);
+    border-radius: 8px; background: #fafbfc; cursor: pointer; font-size: 13px; font-family: inherit; color: var(--text);
+  }
+  .filebtn:hover { border-color: var(--blue); color: var(--blue); }
+  .filebtn.active { border-color: var(--blue); background: #f0faff; color: var(--blue); font-weight: 600; }
+  .md { line-height: 1.9; font-size: 14.5px; }
+  .md h1 { font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .md p { margin: 0 0 12px; color: #333c47; }
+  .mdraw { display: none; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; background: #f8fafc; padding: 14px; border-radius: 8px; line-height: 1.8; }
+  #errorBox { display: none; background: #fef2f2; border: 1px solid #fecaca; color: var(--fail); border-radius: 10px; padding: 12px 16px; font-size: 13.5px; margin-top: 12px; }
+  .viewerhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .viewerhead .name { font-size: 13px; color: var(--muted); }
+  .toggle { font-size: 12px; color: var(--blue); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-family: inherit; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0 24px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>B站合集字幕提取器</h1>
+    <p>输入合集链接，一次性提取全部分集字幕为 Markdown —— 网页界面由本地服务驱动，与命令行 subtitle-cli 共用同一套核心流程</p>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>提取设置</h2>
+    <div class="modes">
+      <label><input type="radio" name="mode" id="modeDemo" checked onchange="setMode()"> 离线演示（内置 Mock，无需 Cookie）</label>
+      <label><input type="radio" name="mode" id="modeReal" onchange="setMode()"> 真实接口（需登录 Cookie）</label>
+    </div>
+    <label for="sourceInput">合集页链接或 season_id</label>
+    <input type="text" id="sourceInput" placeholder="如 https://space.bilibili.com/xxx/channel/collectiondetail?sid=123456 或纯数字 123456">
+    <div id="cookieRow" hidden>
+      <label for="cookieInput">B站 Cookie（至少含 SESSDATA；未登录拿不到字幕列表。也可改用环境变量 BILI_COOKIE）</label>
+      <input type="password" id="cookieInput" placeholder="粘贴浏览器复制的整串 Cookie，仅本次运行使用，不落盘、不写日志">
+    </div>
+    <div id="demoHint" class="hint">
+      演示合集《示例合集·美食漫谈》共 6 集，覆盖三类结果：CC 字幕选轨、AI 字幕回退（EP03）、无字幕（EP05）。
+      本地 Mock 服务回放B站接口结构，CLI / 转换 / 落盘全部走真实代码。
+    </div>
+    <label for="outputInput">输出目录</label>
+    <input type="text" id="outputInput" placeholder="默认：仓库目录下 output/">
+    <div class="row-btn">
+      <button id="startBtn" onclick="start()">开始提取</button>
+      <span id="busy">正在提取，全程串行 + 随机间隔…</span>
+    </div>
+    <div id="errorBox"></div>
+  </section>
+
+  <section class="card" id="progressCard" hidden>
+    <h2>运行进度</h2>
+    <div class="log" id="logBox"></div>
+  </section>
+
+  <section class="card" id="summaryCard" hidden>
+    <h2>结果汇总 <span id="exitBadge"></span></h2>
+    <pre id="summaryText"></pre>
+  </section>
+
+  <section class="card" id="filesCard" hidden>
+    <h2>生成的文件</h2>
+    <div id="fileList"></div>
+  </section>
+
+  <section class="card" id="viewerCard" hidden>
+    <div class="viewerhead">
+      <h2 style="margin:0" id="viewerTitle">预览</h2>
+      <button class="toggle" id="rawToggle" onclick="toggleRaw()">查看原文</button>
+    </div>
+    <span class="name" id="viewerName" style="font-size:12px;color:var(--muted)"></span>
+    <div class="md" id="mdView"></div>
+    <pre class="mdraw" id="rawView"></pre>
+  </section>
+</main>
+<footer>仅供个人学习使用 · 字幕内容归创作者/平台所有</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let pollTimer = null;
+let rawMode = false;
+
+function setMode() {
+  const demo = $("modeDemo").checked;
+  $("sourceInput").disabled = demo;
+  $("cookieRow").hidden = demo;
+  $("demoHint").hidden = !demo;
+}
+
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function renderMd(text) {
+  const out = [];
+  let para = [];
+  const flush = () => { if (para.length) { out.push("<p>" + esc(para.join(" ")) + "</p>"); para = []; } };
+  for (const line of text.split("\n")) {
+    if (line.startsWith("# ")) { flush(); out.push("<h1>" + esc(line.slice(2)) + "</h1>"); }
+    else if (line.trim() === "") flush();
+    else para.push(line);
+  }
+  flush();
+  return out.join("\n");
+}
+
+function kindOf(line) {
+  if (line.includes("失败")) return "fail";
+  if (line.includes("无字幕")) return "nosub";
+  if (line.includes("已存在") || line.includes("跳过")) return "skip";
+  if (line.includes("成功")) return "ok";
+  return "info";
+}
+
+function resetPanels() {
+  $("logBox").innerHTML = "";
+  $("progressCard").hidden = true;
+  $("summaryCard").hidden = true;
+  $("filesCard").hidden = true;
+  $("viewerCard").hidden = true;
+  $("errorBox").style.display = "none";
+  $("errorBox").textContent = "";
+  $("exitBadge").textContent = "";
+}
+
+async function start() {
+  const demo = $("modeDemo").checked;
+  const body = {
+    demo,
+    source: demo ? "" : $("sourceInput").value.trim(),
+    cookie: demo ? "" : $("cookieInput").value.trim(),
+    output: $("outputInput").value.trim(),
+  };
+  if (!demo && !body.source) { alert("请输入合集页链接（含 sid= 参数）或纯数字 season_id"); return; }
+  resetPanels();
+  $("startBtn").disabled = true;
+  $("busy").style.display = "inline";
+  const resp = await fetch("/api/extract", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: "请求失败 " + resp.status }));
+    showError(err.error || "启动失败");
+    $("startBtn").disabled = false;
+    $("busy").style.display = "none";
+    return;
+  }
+  pollTimer = setInterval(poll, 400);
+  poll();
+}
+
+function showError(msg) {
+  $("errorBox").textContent = msg;
+  $("errorBox").style.display = "block";
+}
+
+async function poll() {
+  let s;
+  try {
+    s = await (await fetch("/api/run")).json();
+  } catch (e) { return; }
+  const box = $("logBox");
+  box.innerHTML = s.log
+    .map((item) => `<div class="${kindOf(item.line)}">${esc(item.line)}</div>`)
+    .join("");
+  if (s.log.length || s.running) $("progressCard").hidden = false;
+  box.scrollTop = box.scrollHeight;
+
+  if (s.running) return;
+  clearInterval(pollTimer);
+  pollTimer = null;
+  $("startBtn").disabled = false;
+  $("busy").style.display = "none";
+
+  if (s.error) showError(s.error);
+  if (s.summary != null) {
+    $("summaryCard").hidden = false;
+    $("summaryText").textContent = s.summary;
+    const b = $("exitBadge");
+    b.className = "badge b" + s.exit_code;
+    b.textContent = "退出码 " + s.exit_code;
+  }
+  if (s.files && s.files.length) {
+    $("filesCard").hidden = false;
+    $("fileList").innerHTML = s.files
+      .map((name, i) => `<button class="filebtn${i === 0 ? " active" : ""}" onclick="openFile(this, '${esc(name).replace(/'/g, "&#39;")}')">${esc(name)}</button>`)
+      .join("");
+    openFile($("fileList").firstChild, s.files[0]);
+  }
+}
+
+async function openFile(btn, name) {
+  document.querySelectorAll(".filebtn").forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+  const resp = await fetch("/api/file?name=" + encodeURIComponent(name));
+  if (!resp.ok) { showError("读取文件失败"); return; }
+  const doc = await resp.json();
+  $("viewerCard").hidden = false;
+  $("viewerName").textContent = doc.name;
+  $("mdView").innerHTML = renderMd(doc.content);
+  $("rawView").textContent = doc.content;
+  if (rawMode) { $("mdView").style.display = "none"; $("rawView").style.display = "block"; }
+  else { $("mdView").style.display = "block"; $("rawView").style.display = "none"; }
+  $("viewerCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function toggleRaw() {
+  rawMode = !rawMode;
+  $("rawToggle").textContent = rawMode ? "渲染视图" : "查看原文";
+  $("mdView").style.display = rawMode ? "none" : "block";
+  $("rawView").style.display = rawMode ? "block" : "none";
+}
+
+setMode();
+</script>
+</body>
+</html>
