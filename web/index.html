@@ -101,6 +101,7 @@
     <input type="text" id="outputInput" placeholder="默认：仓库目录下 output/">
     <div class="row-btn">
       <button id="startBtn" onclick="start()">开始提取</button>
+      <button id="previewBtn" class="toggle" onclick="previewFirst()">预览第 1 集（审查排版与内容）</button>
       <span id="busy">正在提取，全程串行 + 随机间隔…</span>
     </div>
     <div id="errorBox"></div>
@@ -114,6 +115,11 @@
   <section class="card" id="summaryCard" hidden>
     <h2>结果汇总 <span id="exitBadge"></span></h2>
     <pre id="summaryText"></pre>
+  </section>
+
+  <section class="card" id="auditCard" hidden>
+    <h2>审查报告（提取前预览）</h2>
+    <pre id="auditText" style="white-space:pre-wrap;font-size:13.5px;line-height:1.9;margin:0"></pre>
   </section>
 
   <section class="card" id="filesCard" hidden>
@@ -202,6 +208,44 @@ async function checkCookie() {
     box.textContent = (j.ok ? "✅ " : "❌ ") + j.message;
   } catch (e) {
     box.textContent = "检测请求失败：" + e;
+  }
+}
+
+async function previewFirst() {
+  const demo = $("modeDemo").checked;
+  const body = {
+    demo,
+    source: $("sourceInput").value.trim(),
+    cookie: demo ? "" : $("cookieInput").value.trim(),
+  };
+  if (!demo && !body.source) { alert("请先输入合集页链接、视频链接或 BV 号"); return; }
+  const btn = $("previewBtn");
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = "预览提取中…";
+  try {
+    const resp = await fetch("/api/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = await resp.json();
+    if (!resp.ok) { showError(j.error || "预览失败"); return; }
+    $("errorBox").style.display = "none";
+    $("auditCard").hidden = false;
+    $("auditText").textContent = j.format_report;
+    if (j.logged_in === false) {
+      showError("⚠️ 当前未登录：B站不向未登录请求返回字幕列表，无法预览内容。请检查 Cookie。");
+    } else if (!j.markdown) {
+      showError("第 1 集没有可用字幕，无法预览内容；其余分集可尝试批量提取。");
+    } else {
+      $("viewerCard").hidden = false;
+      $("viewerName").textContent = `第${j.episode_index}集 ${j.episode_title}（预览，未写盘）`;
+      $("mdView").innerHTML = renderMd(j.markdown);
+      $("rawView").textContent = j.markdown;
+      $("viewerCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = old;
   }
 }
 

@@ -14,7 +14,7 @@ from typing import Optional
 import typer
 
 from .bilibili.client import BilibiliClient, BilibiliError, RiskControlError, normalize_cookie
-from .pipeline import has_failure, run_collection, summarize
+from .pipeline import format_preview, has_failure, preview_first_episode, run_collection, summarize
 
 app = typer.Typer(add_completion=False, help="B站合集字幕提取器：输入合集或其内任一视频链接，一次性提取整个合集的字幕为 Markdown。")
 
@@ -46,6 +46,11 @@ def main(
         "--cookie",
         help="B站 Cookie（至少含 SESSDATA，AI 字幕需要登录态）；也可用 BILI_COOKIE 环境变量",
     ),
+    preview: bool = typer.Option(
+        False,
+        "--preview",
+        help="只提取第 1 集并输出审查报告（排版与内容清洗情况），不写文件",
+    ),
 ) -> None:
     """提取B站合集全部分集的字幕，保存为 Markdown 文件。"""
     _force_utf8_stdio()
@@ -66,6 +71,10 @@ def main(
 
     try:
         with BilibiliClient(cookie=cookie) as client:
+            if preview:
+                result = preview_first_episode(source, client, log=typer.echo)
+                typer.echo(format_preview(result))
+                raise typer.Exit(code=0)
             outcome = run_collection(source, output, client, log=typer.echo)
     except ValueError as exc:
         typer.echo(f"输入无效：{exc}", err=True)

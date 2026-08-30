@@ -14,8 +14,9 @@ from pydantic import BaseModel
 from . import storage
 from .bilibili.client import BilibiliError, RiskControlError
 from .bilibili.models import Episode, EpisodeResult, EpisodeStatus, SubtitleTrack
-from .converter import subtitle_to_markdown
 from .config import RISK_ABORT_THRESHOLD
+from .converter import subtitle_to_markdown
+from .reviewer import AuditReport, CleaningStats, audit_markdown, clean_lines, format_report
 
 
 class PlatformClient(Protocol):
@@ -36,6 +37,21 @@ class RunOutcome(BaseModel):
     results: list[EpisodeResult]
     aborted: bool = False  # 是否因连续风控提前终止
     unprocessed: int = 0  # 提前终止时未处理的分集数
+    audit: AuditReport | None = None  # 全部成功分集的审查报告汇总
+
+
+class PreviewResult(BaseModel):
+    """提取前预览：第 1 集的成品 Markdown + 审查报告（技术方案 §7）。"""
+
+    season_id: str
+    collection_name: str
+    total_episodes: int
+    episode_index: int
+    episode_title: str
+    markdown: str
+    audit: AuditReport
+    logged_in: bool | None = None
+    uname: str | None = None
 
 
 def _check_login(client: PlatformClient, log: Callable[[str], None]) -> None:
@@ -85,6 +101,7 @@ def run_collection(
     results: list[EpisodeResult] = []
     consecutive_risk = 0
     aborted = False
+    reports: list[AuditReport] = []
 
     for episode in episodes:
         label = f"EP{episode.index:02d}"
@@ -121,7 +138,10 @@ def run_collection(
             log(f"{label} 无字幕")
             continue
 
-        content = subtitle_to_markdown(episode_heading(episode), track.lines)
+        # 落盘前审查：保守清洗（无效标记行、连续重复行），并生成排版体检报告
+        cleaned, cleaning = clean_lines(track.lines)
+        content = subtitle_to_markdown(episode_heading(episode), cleaned)
+        reports.append(audit_markdown(content, cleaning))
         try:
             storage.write_markdown(path, content)
         except OSError as exc:
@@ -138,6 +158,34 @@ def run_collection(
         results=results,
         aborted=aborted,
         unprocessed=max(unprocessed, 0),
+        audit=_aggregate_reports(reports),
+    )
+
+
+def _aggregate_reports(reports: list[AuditReport]) -> AuditReport | None:
+    """把逐集审查报告汇总为整卷报告（无成功分集时返回 None）。"""
+    if not reports:
+        return None
+    total_in = sum(r.cleaning.total_in for r in reports if r.cleaning)
+    total_out = sum(r.cleaning.total_out for r in reports if r.cleaning)
+    total_paragraphs = sum(r.paragraphs for r in reports)
+    weighted_avg = (
+        round(sum(r.avg_paragraph_chars * r.paragraphs for r in reports) / total_paragraphs)
+        if total_paragraphs
+        else 0
+    )
+    return AuditReport(
+        paragraphs=total_paragraphs,
+        max_paragraph_chars=max((r.max_paragraph_chars for r in reports), default=0),
+        avg_paragraph_chars=weighted_avg,
+        long_paragraph_count=sum(r.long_paragraph_count for r in reports),
+        fragment_count=sum(r.fragment_count for r in reports),
+        cleaning=CleaningStats(
+            total_in=total_in,
+            total_out=total_out,
+            removed_fillers=sum(r.cleaning.removed_fillers for r in reports if r.cleaning),
+            merged_duplicates=sum(r.cleaning.merged_duplicates for r in reports if r.cleaning),
+        ),
     )
 
 
@@ -162,9 +210,73 @@ def summarize(outcome: RunOutcome) -> str:
         lines.append(f"失败    {len(failed)}：{labels}")
     if outcome.aborted:
         lines.append(f"注意：因连续风控提前终止，剩余 {outcome.unprocessed} 集未处理。")
+    if outcome.audit is not None and outcome.audit.paragraphs:
+        lines.append(f"审查：{outcome.audit.one_line()}")
     if failed:
         lines.append("失败可重跑：subtitle-cli <同一输入> 会自动跳过已成功分集")
     return "\n".join(lines)
+
+
+def preview_first_episode(
+    raw_input: str,
+    client: PlatformClient,
+    *,
+    log: Callable[[str], None] = print,
+) -> PreviewResult:
+    """提取前审查：只提取第 1 集，返回成品 Markdown 与审查报告（不写文件）。
+
+    用于在批量提取前确认字幕的排版与内容质量（产品文档 v0.2 增补）。
+    第 1 集无字幕时 markdown 为空串，message 说明原因。
+    """
+    season_id = client.resolve_input(raw_input)
+    collection_name, episodes = client.list_episodes(season_id)
+    if not episodes:
+        raise ValueError("该合集没有任何分集")
+    first = episodes[0]
+    log(f"预览《{collection_name}》第 1 集：{first.title}")
+
+    track = client.fetch_subtitles(first)
+    cleaned, cleaning = clean_lines(track.lines) if track else ([], None)
+    markdown = subtitle_to_markdown(episode_heading(first), cleaned)
+    audit = audit_markdown(markdown, cleaning)
+
+    logged_in: bool | None = None
+    uname: str | None = None
+    whoami = getattr(client, "whoami", None)
+    if whoami is not None:
+        try:
+            logged_in, uname = whoami()
+        except Exception:  # noqa: BLE001 - 预览的自检失败不影响结果
+            pass
+
+    return PreviewResult(
+        season_id=season_id,
+        collection_name=collection_name,
+        total_episodes=len(episodes),
+        episode_index=first.index,
+        episode_title=first.title,
+        markdown=markdown if track else "",
+        audit=audit,
+        logged_in=logged_in,
+        uname=uname,
+    )
+
+
+def format_preview(result: PreviewResult) -> str:
+    """预览结果的终端文本形态。"""
+    parts = [
+        f"合集《{result.collection_name}》共 {result.total_episodes} 集，"
+        f"预览第 {result.episode_index} 集：{result.episode_title}"
+    ]
+    if result.logged_in is False:
+        parts.append("⚠️ 未登录：B站不向未登录请求返回字幕列表，无法预览内容。请检查 Cookie。")
+    if not result.markdown:
+        parts.append("第 1 集没有可用字幕，无法预览；可继续批量提取其余分集。")
+    else:
+        parts.append(format_report(result.audit))
+        parts.append("—— 第 1 集成品预览 ——")
+        parts.append(result.markdown.rstrip())
+    return "\n\n".join(parts)
 
 
 def has_failure(outcome: RunOutcome) -> bool:

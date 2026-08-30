@@ -19,7 +19,14 @@ from subtitle_cli.bilibili.models import (
     SubtitleTrack,
 )
 from subtitle_cli.config import RISK_ABORT_THRESHOLD
-from subtitle_cli.pipeline import RunOutcome, has_failure, run_collection, summarize
+from subtitle_cli.pipeline import (
+    RunOutcome,
+    format_preview,
+    has_failure,
+    preview_first_episode,
+    run_collection,
+    summarize,
+)
 
 
 class FakeClient:
@@ -260,6 +267,55 @@ def test_login_selfcheck_failure_does_not_abort(tmp_path: Path):
     outcome = run_collection("100", tmp_path, client, log=lines.append)
     assert outcome.results[0].status == EpisodeStatus.SUCCESS
     assert any("校验失败" in line for line in lines)
+
+
+# ---- 提取前审查与预览 ----
+def test_run_cleans_and_includes_audit_summary(tmp_path: Path):
+    """落盘前清洗（重复行/标记行）+ 汇总含审查行。"""
+    eps = make_episodes(1)
+    track = SubtitleTrack(
+        lan="zh-CN",
+        lines=[
+            SubtitleLine(from_time=0, to_time=1, content="（音乐）"),
+            SubtitleLine(from_time=1, to_time=2, content="真实内容。"),
+            SubtitleLine(from_time=2, to_time=3, content="真实内容。"),
+        ],
+    )
+    client = FakeClient(episodes=eps, script={1: track})
+
+    outcome = run_collection("100", tmp_path, client)
+
+    path = tmp_path / "测试合集" / "EP01 标题1.md"
+    text = path.read_text(encoding="utf-8")
+    assert "（音乐）" not in text
+    assert text.count("真实内容。") == 1  # 连续重复已合并
+    assert outcome.audit is not None and outcome.audit.cleaning.removed_fillers == 1
+    summary = summarize(outcome)
+    assert "审查：" in summary and "清理无效行 1" in summary
+
+
+def test_preview_first_episode(tmp_path: Path):
+    eps = make_episodes(2)
+    client = FakeClient(episodes=eps, script={1: track_of("第一集的内容。"), 2: track_of("x")})
+    lines: list[str] = []
+
+    result = preview_first_episode("100", client, log=lines.append)
+
+    assert result.collection_name == "测试合集"
+    assert result.total_episodes == 2
+    assert result.markdown == "# 第1集 标题1\n\n第一集的内容。\n"
+    assert result.audit.paragraphs == 1
+    assert result.audit.cleaning.removed_fillers == 0
+    text = format_preview(result)
+    assert "审查报告" in text and "第一集的内容。" in text
+
+
+def test_preview_no_subtitle_first_episode(tmp_path: Path):
+    eps = make_episodes(2)
+    client = FakeClient(episodes=eps, script={1: None, 2: track_of("x")})
+    result = preview_first_episode("100", client)
+    assert result.markdown == ""
+    assert "没有可用字幕" in format_preview(result)
 
 
 # ---- 输入校验透传 ----

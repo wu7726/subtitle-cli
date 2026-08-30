@@ -129,6 +129,16 @@ def test_web_ui_offline_demo_and_error_paths(tmp_path: Path):
         status, resp = _post(base, "/api/check-cookie", {"cookie": ""})
         assert status == 400 and resp["ok"] is False
 
+        # 提取前审查预览：只提取第 1 集，返回成品 Markdown 与审查报告
+        status, resp = _post(
+            base, "/api/preview",
+            {"demo": True, "output": str(tmp_path / "out")},
+        )
+        assert status == 200
+        assert resp["total_episodes"] == 6
+        assert resp["markdown"].startswith("# 第1集 早餐的哲学")
+        assert "审查报告" in resp["format_report"]
+
         # 运行中重复提交 → 409
         _post(base, "/api/extract", {"demo": True, "output": str(tmp_path / "out3")})
         status, resp = _post(base, "/api/extract", {"demo": True, "output": str(tmp_path / "out4")})

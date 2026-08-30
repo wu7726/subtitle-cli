@@ -34,7 +34,13 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from subtitle_cli import config  # noqa: E402
 from subtitle_cli.bilibili.client import BilibiliClient, normalize_cookie  # noqa: E402
-from subtitle_cli.pipeline import has_failure, run_collection, summarize  # noqa: E402
+from subtitle_cli.pipeline import (  # noqa: E402
+    format_preview,
+    has_failure,
+    preview_first_episode,
+    run_collection,
+    summarize,
+)
 
 INDEX_HTML = REPO_ROOT / "web" / "index.html"
 
@@ -60,8 +66,8 @@ def _fresh_state() -> dict:
 STATE: dict = _fresh_state()
 
 
-def start_demo() -> callable:
-    """启动本地 Mock 并把接口层指过去，返回恢复函数。"""
+def start_demo() -> str:
+    """启动本地 Mock 并把接口层指过去，返回其 base URL（恢复用 stop_demo）。"""
     from demo.run_demo import make_handler, patch_client_to
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler())
@@ -74,7 +80,20 @@ def start_demo() -> callable:
         server.shutdown()
         server.server_close()
 
-    return stop
+    _demo_stops.append(stop)
+    return base
+
+
+_demo_stops: list[callable] = []
+
+
+def stop_demo() -> None:
+    while _demo_stops:
+        stop = _demo_stops.pop(0)
+        try:
+            stop()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def run_job(source: str, cookie: str | None, demo: bool, output_dir: str) -> None:
@@ -94,7 +113,7 @@ def run_job(source: str, cookie: str | None, demo: bool, output_dir: str) -> Non
             # 输入为空时使用默认演示合集链接
             from demo.run_demo import DEMO_SOURCE
 
-            restore = start_demo()
+            start_demo()
             source = (source or "").strip() or DEMO_SOURCE
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         with BilibiliClient(cookie=cookie or None) as client:
@@ -116,11 +135,8 @@ def run_job(source: str, cookie: str | None, demo: bool, output_dir: str) -> Non
         STATE["error"] = f"{type(exc).__name__}: {exc}"
         STATE["phase"] = "error"
     finally:
-        if restore is not None:
-            try:
-                restore()
-            except Exception:  # noqa: BLE001
-                pass
+        if demo:
+            stop_demo()
         STATE["running"] = False
 
 
@@ -201,6 +217,48 @@ class Handler(BaseHTTPRequestHandler):
                         "请重新复制完整 Cookie（需在已登录的浏览器中获取）。",
                     }
                 )
+            return
+
+        if path == "/api/preview":
+            # 提取前审查：只提取第 1 集，返回成品 Markdown 与审查报告
+            with _lock:
+                if STATE["running"]:
+                    self._json({"error": "已有任务在运行中，请稍候"}, 409)
+                    return
+            demo = bool(data.get("demo"))
+            source = (data.get("source") or "").strip()
+            cookie = (data.get("cookie") or "").strip() or os.environ.get("BILI_COOKIE") or ""
+            if not demo and not source:
+                self._json({"error": "缺少合集链接或 season_id"}, 400)
+                return
+            try:
+                if not demo and cookie:
+                    cookie, _ = normalize_cookie(cookie)
+                    if "sessdata" not in cookie.lower():
+                        self._json({"error": "Cookie 中没有 SESSDATA 字段，无法获取字幕列表"}, 400)
+                        return
+                lines: list[str] = []
+                if demo:
+                    from demo.run_demo import DEMO_SOURCE
+
+                    start_demo()
+                    source = source or DEMO_SOURCE
+                try:
+                    with BilibiliClient(cookie=cookie or None) as client:
+                        result = preview_first_episode(
+                            source, client, log=lambda line: lines.append(line)
+                        )
+                finally:
+                    if demo:
+                        stop_demo()
+                payload = result.model_dump(mode="json")
+                payload["preview_log"] = lines
+                payload["format_report"] = format_preview(result)
+                self._json(payload)
+            except ValueError as exc:
+                self._json({"error": str(exc)}, 400)
+            except Exception as exc:  # noqa: BLE001
+                self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
             return
 
         if path != "/api/extract":
