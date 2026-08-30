@@ -33,7 +33,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT))
 
 from subtitle_cli import config  # noqa: E402
-from subtitle_cli.bilibili.client import BilibiliClient  # noqa: E402
+from subtitle_cli.bilibili.client import BilibiliClient, normalize_cookie  # noqa: E402
 from subtitle_cli.pipeline import has_failure, run_collection, summarize  # noqa: E402
 
 INDEX_HTML = REPO_ROOT / "web" / "index.html"
@@ -80,15 +80,15 @@ def start_demo() -> callable:
 def run_job(source: str, cookie: str | None, demo: bool, output_dir: str) -> None:
     restore = None
     try:
-        if not demo and cookie and "sessdata" not in cookie.lower():
-            STATE["error"] = (
-                "Cookie 中没有发现 SESSDATA 字段，无法获取字幕列表。请从浏览器"
-                "开发者工具（Network → 任意 api.bilibili.com 请求 → 请求头）复制"
-                "完整 Cookie 整串。"
-            )
-            STATE["exit_code"] = 2
-            STATE["phase"] = "error"
-            return
+        if not demo and cookie:
+            cookie, cookie_note = normalize_cookie(cookie)
+            if cookie_note:
+                STATE["log"].append({"line": cookie_note})
+            if "sessdata" not in cookie.lower():
+                STATE["error"] = cookie_note or "Cookie 中没有 SESSDATA 字段。"
+                STATE["exit_code"] = 2
+                STATE["phase"] = "error"
+                return
         if demo:
             # 演示模式同样支持粘贴视频链接（Mock 的 view 路由会反查出演示合集）；
             # 输入为空时使用默认演示合集链接
@@ -166,14 +166,45 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
-        if urlparse(self.path).path != "/api/extract":
-            self._json({"error": "not found"}, 404)
-            return
+        path = urlparse(self.path).path
         length = int(self.headers.get("Content-Length") or 0)
         try:
             data = json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
         except (json.JSONDecodeError, UnicodeDecodeError):
             self._json({"error": "请求体不是合法 JSON"}, 400)
+            return
+
+        if path == "/api/check-cookie":
+            # 登录态检测：粘贴后先验证，避免空跑全部集数
+            raw = (data.get("cookie") or "").strip()
+            if not raw:
+                self._json({"ok": False, "message": "请先粘贴 Cookie"}, 400)
+                return
+            cookie, note = normalize_cookie(raw)
+            if "sessdata" not in cookie.lower():
+                self._json({"ok": False, "message": note or "Cookie 中没有 SESSDATA 字段。"})
+                return
+            try:
+                with BilibiliClient(cookie=cookie) as client:
+                    logged_in, uname = client.whoami()
+            except Exception as exc:  # noqa: BLE001 - 检测失败给出原因
+                self._json({"ok": False, "message": f"检测失败：{exc}"})
+                return
+            if logged_in:
+                suffix = f"（{note}）" if note else ""
+                self._json({"ok": True, "message": f"登录态有效：{uname}{suffix}"})
+            else:
+                self._json(
+                    {
+                        "ok": False,
+                        "message": "Cookie 无效或已过期：B站认为当前未登录。"
+                        "请重新复制完整 Cookie（需在已登录的浏览器中获取）。",
+                    }
+                )
+            return
+
+        if path != "/api/extract":
+            self._json({"error": "not found"}, 404)
             return
         demo = bool(data.get("demo"))
         source = (data.get("source") or "").strip()

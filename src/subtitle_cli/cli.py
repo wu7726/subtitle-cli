@@ -13,7 +13,7 @@ from typing import Optional
 
 import typer
 
-from .bilibili.client import BilibiliClient, BilibiliError, RiskControlError
+from .bilibili.client import BilibiliClient, BilibiliError, RiskControlError, normalize_cookie
 from .pipeline import has_failure, run_collection, summarize
 
 app = typer.Typer(add_completion=False, help="B站合集字幕提取器：输入合集或其内任一视频链接，一次性提取整个合集的字幕为 Markdown。")
@@ -50,13 +50,13 @@ def main(
     """提取B站合集全部分集的字幕，保存为 Markdown 文件。"""
     _force_utf8_stdio()
     cookie = cookie or os.environ.get("BILI_COOKIE") or None
-    if cookie and "sessdata" not in cookie.lower():
-        typer.echo(
-            "Cookie 中没有发现 SESSDATA 字段，无法获取字幕列表。请从浏览器开发者"
-            "工具复制完整 Cookie 整串（至少包含 SESSDATA=...）。",
-            err=True,
-        )
-        raise typer.Exit(code=2)
+    if cookie:
+        cookie, cookie_note = normalize_cookie(cookie)
+        if cookie_note:
+            typer.echo(cookie_note)
+        if "sessdata" not in cookie.lower():
+            typer.echo("无法获取字幕列表，已停止。", err=True)
+            raise typer.Exit(code=2)
 
     try:
         output.mkdir(parents=True, exist_ok=True)

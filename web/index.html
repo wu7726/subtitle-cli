@@ -86,7 +86,11 @@
     <input type="text" id="sourceInput" placeholder="支持合集页链接（含 sid=）、合集里单个视频的链接或 BV 号（自动识别整个合集）、纯数字 season_id">
     <div id="cookieRow" hidden>
       <label for="cookieInput">B站 Cookie（至少含 SESSDATA；未登录拿不到字幕列表。也可改用环境变量 BILI_COOKIE）</label>
-      <input type="password" id="cookieInput" placeholder="粘贴浏览器复制的整串 Cookie，仅本次运行使用，不落盘、不写日志">
+      <input type="password" id="cookieInput" placeholder="粘贴浏览器复制的整串 Cookie，仅本次运行使用，不落盘、不写日志。只复制 SESSDATA 的值也可以">
+      <div style="display:flex; align-items:center; gap:10px; margin-top:8px">
+        <button type="button" class="toggle" onclick="checkCookie()">检测登录态</button>
+        <span id="cookieCheckResult" class="hint"></span>
+      </div>
     </div>
     <div id="demoHint" class="hint">
       演示合集《示例合集·美食漫谈》共 6 集，覆盖三类结果：CC 字幕选轨、AI 字幕回退（EP03）、无字幕（EP05）。
@@ -181,6 +185,24 @@ function resetPanels() {
   $("errorBox").style.display = "none";
   $("errorBox").textContent = "";
   $("exitBadge").textContent = "";
+}
+
+async function checkCookie() {
+  const box = $("cookieCheckResult");
+  const raw = $("cookieInput").value.trim();
+  if (!raw) { box.textContent = "请先粘贴 Cookie"; return; }
+  box.textContent = "检测中…";
+  try {
+    const resp = await fetch("/api/check-cookie", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cookie: raw }),
+    });
+    const j = await resp.json();
+    box.textContent = (j.ok ? "✅ " : "❌ ") + j.message;
+  } catch (e) {
+    box.textContent = "检测请求失败：" + e;
+  }
 }
 
 async function start() {

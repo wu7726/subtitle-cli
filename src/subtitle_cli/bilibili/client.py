@@ -50,6 +50,31 @@ def extract_bvid(raw: str) -> str | None:
     return match.group(0) if match else None
 
 
+def normalize_cookie(raw: str) -> tuple[str, str | None]:
+    """规范化用户粘贴的 Cookie，返回（规范化结果, 提示信息或 None）。
+
+    处理三种常见情形：
+    - 完整 Cookie 串（含 SESSDATA=）→ 原样透传；
+    - 只粘贴了 SESSDATA 的「值」（无任何 = 号）→ 自动补全为 SESSDATA=<值>；
+    - 粘贴了其他 Cookie 片段但没有 SESSDATA → 返回提示（调用方据此报错）。
+    """
+    cookie = (raw or "").strip().strip('"').strip("'")
+    if not cookie:
+        return "", None
+    if "sessdata=" in cookie.lower():
+        return cookie, None
+    if "=" not in cookie:
+        return (
+            f"SESSDATA={cookie}",
+            "检测到输入的可能是 SESSDATA 的值（不含字段名），已自动按 SESSDATA 处理。",
+        )
+    return (
+        cookie,
+        "输入的 Cookie 中没有 SESSDATA 字段——可能复制自未登录的会话，"
+        "或只复制了部分片段。请在已登录的浏览器中按 README 说明重新复制。",
+    )
+
+
 class BilibiliClient:
     """PlatformClient 协议的B站实现。全程串行，请求间随机间隔。"""
 

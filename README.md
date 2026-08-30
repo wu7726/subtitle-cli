@@ -68,6 +68,8 @@ subtitle-cli <合集URL或season_id> --cookie "SESSDATA=..."
 2. 按 F12 打开开发者工具 → 网络（Network）→ 刷新页面 → 任选一个发往 `api.bilibili.com` 的请求 → 请求头里的 `Cookie:` 整串复制；
 3. 通过 `--cookie` 参数传入，或设置环境变量 `BILI_COOKIE`（至少包含 `SESSDATA=...`）。
 
+也可以只复制 SESSDATA 这一项的**值**（Application → Cookies → 双击 SESSDATA 的值），工具会自动补全字段名。粘贴后可先用网页界面的「检测登录态」按钮验证。
+
 Cookie 属于敏感凭据：本工具只把它透传给 `api.bilibili.com` 域的请求，不落盘、不打印、不进日志，也不会存进 Git。
 
 ### 输出结构

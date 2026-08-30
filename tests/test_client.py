@@ -15,6 +15,7 @@ from subtitle_cli.bilibili.client import (
     BilibiliClient,
     BilibiliError,
     RiskControlError,
+    normalize_cookie,
 )
 from subtitle_cli.bilibili.models import Episode
 
@@ -455,6 +456,26 @@ def test_resolve_bvid_risk_control_stays_risk_error():
 
 
 # ---- 登录态自检 ----
+def test_normalize_cookie_passthrough_full_string():
+    full = "SESSDATA=abc; buvid3=x; b_nut=1"
+    assert normalize_cookie(full) == (full, None)
+    assert normalize_cookie(f'  "{full}" ') == (full, None)  # 去引号与空白
+    assert normalize_cookie("sessdata=abc")[1] is None  # 大小写不敏感
+
+
+def test_normalize_cookie_wraps_bare_value():
+    cookie, note = normalize_cookie("xx%2Fyy%2Fzz")
+    assert cookie == "SESSDATA=xx%2Fyy%2Fzz"
+    assert note is not None and "自动按 SESSDATA 处理" in note
+
+
+def test_normalize_cookie_missing_sessdata_reports():
+    cookie, note = normalize_cookie("buvid3=abc; b_nut=1")
+    assert cookie == "buvid3=abc; b_nut=1"  # 不改写
+    assert note is not None and "SESSDATA" in note
+    assert normalize_cookie("")[0] == ""
+
+
 def test_whoami_logged_in():
     nav = {"code": 0, "data": {"isLogin": True, "uname": "测试用户", "mid": 42}}
 

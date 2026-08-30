@@ -125,6 +125,10 @@ def test_web_ui_offline_demo_and_error_paths(tmp_path: Path):
         assert "成功 5（其中增量跳过 0）" in state["summary"]
         assert len(state["files"]) == 5
 
+        # 登录态检测端点：空 Cookie 快速失败（带 Cookie 的分支需真实网络，由集成验证）
+        status, resp = _post(base, "/api/check-cookie", {"cookie": ""})
+        assert status == 400 and resp["ok"] is False
+
         # 运行中重复提交 → 409
         _post(base, "/api/extract", {"demo": True, "output": str(tmp_path / "out3")})
         status, resp = _post(base, "/api/extract", {"demo": True, "output": str(tmp_path / "out4")})
