@@ -180,3 +180,28 @@ def test_web_vault_apis(tmp_path: Path):
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+def test_page_structure_vault_elements(tmp_path: Path):
+    """M10：页面包含 vault/迁移/Obsidian 直达的关键元素与默认态。"""
+    proc, base = _start_server(tmp_path)
+    try:
+        status, html = _get(base, "/")
+        assert status == 200
+        for key in [
+            'id="vaultInput"', 'id="vaultSubdirInput"', 'id="migrateCard"',
+            'id="scanBtn"', 'id="migrateBtn"', 'id="overwriteChk"',
+            'id="openObsidian"', 'id="outVault"', 'id="outFolder"',
+            '写入 Obsidian vault（推荐）', '检查 vault', '创建该文件夹',
+            'id="outVault" checked', '在 Obsidian 中打开合集索引',
+        ]:
+            assert key in html, key
+        # 默认态：输出位置区块随演示模式隐藏；迁移卡常显
+        assert 'id="outputSection" hidden' in html
+        assert '<section class="card" id="migrateCard">' in html
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()

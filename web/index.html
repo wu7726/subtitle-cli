@@ -28,6 +28,7 @@
   }
   input:focus { border-color: var(--blue); background: #fff; }
   input:disabled { background: #f0f1f3; color: var(--muted); }
+  input[type=radio], input[type=checkbox] { accent-color: var(--blue); }
   .modes { display: flex; gap: 10px; margin-bottom: 4px; }
   .modes label {
     flex: 1; display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px;
@@ -35,13 +36,13 @@
   }
   .modes label:has(input:checked) { border-color: var(--blue); background: #f0faff; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
-  .row-btn { margin-top: 16px; display: flex; align-items: center; gap: 12px; }
-  #startBtn {
+  .row-btn { margin-top: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .primarybtn {
     background: var(--pink); border: none; color: #fff; font-size: 15px; font-weight: 600;
     padding: 10px 28px; border-radius: 999px; cursor: pointer; font-family: inherit;
   }
-  #startBtn:hover { filter: brightness(1.05); }
-  #startBtn:disabled { opacity: .55; cursor: not-allowed; }
+  .primarybtn:hover { filter: brightness(1.05); }
+  .primarybtn:disabled { opacity: .55; cursor: not-allowed; }
   #busy { display: none; color: var(--blue); font-size: 13px; }
   #busy::before { content: "⏳ "; }
   .log { max-height: 300px; overflow-y: auto; font-family: Consolas, "Courier New", monospace; font-size: 13px; line-height: 1.9; background: #0f172a; color: #d7e3f4; border-radius: 10px; padding: 12px 14px; }
@@ -57,14 +58,34 @@
   }
   .filebtn:hover { border-color: var(--blue); color: var(--blue); }
   .filebtn.active { border-color: var(--blue); background: #f0faff; color: var(--blue); font-weight: 600; }
+  .tag { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 600; vertical-align: 1px; }
+  .tag-ok { background: #dcfce7; color: var(--ok); }
+  .tag-skip { background: #dbeafe; color: var(--skip); }
+  .tag-fail { background: #fee2e2; color: var(--fail); }
+  .tag-muted { background: #e5e7eb; color: var(--muted); }
   .md { line-height: 1.9; font-size: 14.5px; }
   .md h1 { font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
   .md p { margin: 0 0 12px; color: #333c47; }
+  .md .wikilist { list-style: none; padding: 0; margin: 0 0 12px; }
+  .md .wikilist li { margin: 4px 0; }
+  .wikilink {
+    background: none; border: none; color: var(--blue); cursor: pointer; font-size: 14.5px;
+    font-family: inherit; padding: 0; text-decoration: underline; text-decoration-color: #b7e3f5;
+  }
+  .wikilink:hover { color: var(--pink); }
+  .props { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 13px; }
+  .props td { border: 1px solid var(--border); padding: 5px 10px; }
+  .props td:first-child { width: 130px; background: #f8fafc; color: var(--muted); font-family: Consolas, monospace; }
   .mdraw { display: none; font-family: Consolas, monospace; font-size: 13px; white-space: pre-wrap; background: #f8fafc; padding: 14px; border-radius: 8px; line-height: 1.8; }
   #errorBox { display: none; background: #fef2f2; border: 1px solid #fecaca; color: var(--fail); border-radius: 10px; padding: 12px 16px; font-size: 13.5px; margin-top: 12px; }
   .viewerhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .viewerhead .name { font-size: 13px; color: var(--muted); }
   .toggle { font-size: 12px; color: var(--blue); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-family: inherit; }
+  .scanitem {
+    display: flex; align-items: center; gap: 8px; margin: 0 0 6px; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: 8px; font-size: 13px; color: var(--text); cursor: pointer;
+  }
+  .scanitem:hover { border-color: var(--blue); }
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0 24px; }
 </style>
 </head>
@@ -72,7 +93,7 @@
 <header>
   <div class="wrap">
     <h1>B站合集字幕提取器</h1>
-    <p>输入合集链接，一次性提取全部分集字幕为 Markdown —— 网页界面由本地服务驱动，与命令行 subtitle-cli 共用同一套核心流程</p>
+    <p>输入合集链接，一次性提取全部分集字幕为 Markdown，直接写入 Obsidian vault —— 本地服务驱动，与命令行 subtitle-cli 共用同一套核心流程</p>
   </div>
 </header>
 <main>
@@ -83,7 +104,7 @@
       <label><input type="radio" name="mode" id="modeReal" onchange="setMode()"> 真实接口（需登录 Cookie）</label>
     </div>
     <label for="sourceInput">合集页 / 合集内任一视频链接 / BV 号 / season_id</label>
-    <input type="text" id="sourceInput" placeholder="支持合集页链接（含 sid=）、合集里单个视频的链接或 BV 号（自动识别整个合集）、纯数字 season_id">
+    <input type="text" id="sourceInput" placeholder="支持合集页链接（含 sid=）、合集里单个视频的链接或 BV 号（自动识别整个合集）、多P视频链接、纯数字 season_id">
     <div id="cookieRow" hidden>
       <label for="cookieInput">B站 Cookie（至少含 SESSDATA；未登录拿不到字幕列表。也可改用环境变量 BILI_COOKIE）</label>
       <input type="password" id="cookieInput" placeholder="粘贴浏览器复制的整串 Cookie，仅本次运行使用，不落盘、不写日志。只复制 SESSDATA 的值也可以">
@@ -97,14 +118,49 @@
       本地 Mock 服务回放B站接口结构，CLI / 转换 / 落盘全部走真实代码。
       输入框已预填演示合集第 1 集的视频链接——就像真实场景一样，粘贴合集里任意一个视频网址即可自动识别并爬取整个合集；也可清空使用合集链接。
     </div>
-    <label for="outputInput">输出目录</label>
-    <input type="text" id="outputInput" placeholder="默认：仓库目录下 output/">
+    <div id="outputSection" hidden>
+      <div class="modes" style="margin-top:12px">
+        <label><input type="radio" name="outmode" id="outVault" checked onchange="setOutMode()"> 写入 Obsidian vault（推荐）</label>
+        <label><input type="radio" name="outmode" id="outFolder" onchange="setOutMode()"> 输出到普通文件夹</label>
+      </div>
+      <div id="vaultRow">
+        <label for="vaultInput">vault 根目录（如 D:/Obsidian/MyVault，传入即记住）</label>
+        <input type="text" id="vaultInput" placeholder="粘贴或输入 vault 根目录">
+        <label for="vaultSubdirInput">vault 内字幕文件夹（默认 B站字幕，可嵌套如 学习/B站字幕）</label>
+        <input type="text" id="vaultSubdirInput" placeholder="B站字幕">
+        <div style="display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap">
+          <button type="button" class="toggle" onclick="checkVault(false)">检查 vault</button>
+          <button type="button" class="toggle" id="createVaultBtn" onclick="checkVault(true)" style="display:none">创建该文件夹</button>
+          <span id="vaultCheckResult" class="hint"></span>
+        </div>
+      </div>
+      <div id="folderRow" hidden>
+        <label for="outputInput">输出目录</label>
+        <input type="text" id="outputInput" placeholder="默认：仓库目录下 output/">
+      </div>
+    </div>
     <div class="row-btn">
-      <button id="startBtn" onclick="start()">开始提取</button>
+      <button id="startBtn" class="primarybtn" onclick="start()">开始提取</button>
       <button id="previewBtn" class="toggle" onclick="previewFirst()">预览第 1 集（审查排版与内容）</button>
       <span id="busy">正在提取，全程串行 + 随机间隔…</span>
     </div>
     <div id="errorBox"></div>
+  </section>
+
+  <section class="card" id="migrateCard">
+    <h2>迁移旧字幕（不联网、不需要 Cookie）</h2>
+    <div class="hint">把已下载的旧字幕文件夹转换成带属性头的笔记写入上方配置的 vault；恢复不了的字段（BV 号、视频链接）将留空并在报告中说明。文件名或内容不符合「EP 序号 标题」的文件会计入失败清单。</div>
+    <label for="migrateDirInput">旧字幕目录</label>
+    <input type="text" id="migrateDirInput" value="output" placeholder="默认：仓库目录下 output/">
+    <div class="row-btn" style="margin-top:8px">
+      <button class="toggle" id="scanBtn" onclick="scanLegacy()">扫描旧合集</button>
+      <button id="migrateBtn" class="primarybtn" onclick="startMigrate()" disabled>开始迁移</button>
+    </div>
+    <div id="scanList" style="margin-top:10px"></div>
+    <label style="display:flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer">
+      <input type="checkbox" id="overwriteChk"> 覆盖已迁移过的文件（默认跳过；提取产物永不覆盖）
+    </label>
+    <div class="hint" id="migrateMsg"></div>
   </section>
 
   <section class="card" id="progressCard" hidden>
@@ -115,6 +171,9 @@
   <section class="card" id="summaryCard" hidden>
     <h2>结果汇总 <span id="exitBadge"></span></h2>
     <pre id="summaryText"></pre>
+    <div class="row-btn" style="margin-top:8px">
+      <button id="openObsidian" class="primarybtn" style="display:none; font-size:13px; padding:8px 20px" onclick="openInObsidian()">在 Obsidian 中打开合集索引</button>
+    </div>
   </section>
 
   <section class="card" id="auditCard" hidden>
@@ -143,12 +202,15 @@
 const $ = (id) => document.getElementById(id);
 let pollTimer = null;
 let rawMode = false;
+let obsidianUri = null;
+let currentFiles = [];
 
 const DEMO_VIDEO_URL = "https://www.bilibili.com/video/BV1DE0000001/";
 
 function setMode() {
   const demo = $("modeDemo").checked;
   $("cookieRow").hidden = demo;
+  $("outputSection").hidden = demo;
   $("demoHint").hidden = !demo;
   if (demo) {
     if (!$("sourceInput").value.trim()) $("sourceInput").value = DEMO_VIDEO_URL;
@@ -157,29 +219,103 @@ function setMode() {
   }
 }
 
-function esc(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function setOutMode() {
+  const vault = $("outVault").checked;
+  $("vaultRow").hidden = !vault;
+  $("folderRow").hidden = vault;
 }
 
-function renderMd(text) {
-  const out = [];
-  let para = [];
-  const flush = () => { if (para.length) { out.push("<p>" + esc(para.join(" ")) + "</p>"); para = []; } };
-  for (const line of text.split("\n")) {
-    if (line.startsWith("# ")) { flush(); out.push("<h1>" + esc(line.slice(2)) + "</h1>"); }
-    else if (line.trim() === "") flush();
-    else para.push(line);
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function unquote(s) {
+  s = s.trim();
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+    try { return JSON.parse(s); } catch (e) { return s.slice(1, -1); }
   }
-  flush();
-  return out.join("\n");
+  return s;
+}
+
+function parseFrontmatter(text) {
+  if (!text.startsWith("---\n")) return null;
+  const end = text.indexOf("\n---", 4);
+  if (end < 0) return null;
+  const fm = [];
+  let current = null;
+  for (const line of text.slice(4, end).split("\n")) {
+    if (!line.trim()) continue;
+    const item = line.match(/^\s+-\s*(.+)$/);
+    if (item && current) { current.value.push(unquote(item[1])); continue; }
+    const kv = line.match(/^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/);
+    if (!kv) continue;
+    current = { key: kv[1], value: kv[2].trim() === "" ? [] : kv[2].trim() };
+    fm.push(current);
+  }
+  return { props: fm, body: text.slice(end + 4).replace(/^\n+/, "") };
+}
+
+function tagClass(badge) {
+  if (badge === "新写入" || badge === "迁移") return "tag-ok";
+  if (badge === "跳过") return "tag-skip";
+  if (badge === "失败") return "tag-fail";
+  return "tag-muted";  // 索引 / 已有
 }
 
 function kindOf(line) {
-  if (line.includes("失败")) return "fail";
+  if (line.includes("失败") || line.includes("无法解析")) return "fail";
   if (line.includes("无字幕")) return "nosub";
-  if (line.includes("已存在") || line.includes("跳过")) return "skip";
-  if (line.includes("成功")) return "ok";
+  if (line.includes("已存在") || line.includes("跳过") || line.includes("已迁移过")) return "skip";
+  if (line.includes("已写入") || line.includes("成功") || line.includes("迁移")) return "ok";
   return "info";
+}
+
+function wikilinkButton(stem, alias) {
+  const name = esc(stem + ".md").replace(/'/g, "&#39;");
+  return `<button class="wikilink" onclick="openByName('${name}')">${esc(alias || stem)}</button>`;
+}
+
+function renderMd(text) {
+  const parsed = parseFrontmatter(text);
+  let body = text;
+  const out = [];
+  if (parsed) {
+    body = parsed.body;
+    const rows = parsed.props
+      .map(({key, value}) => {
+        const v = Array.isArray(value) ? value.map(unquote).join("、") : unquote(value);
+        return `<tr><td>${esc(key)}</td><td>${esc(v)}</td></tr>`;
+      })
+      .join("");
+    out.push(`<table class="props">${rows}</table>`);
+  }
+  let para = [];
+  const flush = () => { if (para.length) { out.push("<p>" + esc(para.join(" ")) + "</p>"); para = []; } };
+  const lines = body.split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith("# ")) { flush(); out.push("<h1>" + esc(line.slice(2)) + "</h1>"); i++; continue; }
+    const link = line.match(/^-\s*\[\[([^\]|]+)(?:\|([^\]]+))?\]\]\s*$/);
+    if (link) {
+      // 连续双链行合并为一个列表（合集索引页形态）
+      flush();
+      const items = [];
+      while (i < lines.length) {
+        const m = lines[i].match(/^-\s*\[\[([^\]|]+)(?:\|([^\]]+))?\]\]\s*$/);
+        if (!m) break;
+        items.push("<li>" + wikilinkButton(m[1], m[2]) + "</li>");
+        i++;
+      }
+      out.push('<ul class="wikilist">' + items.join("") + "</ul>");
+      continue;
+    }
+    if (line.trim() === "") flush();
+    else para.push(line);
+    i++;
+  }
+  flush();
+  return out.join("\n");
 }
 
 function resetPanels() {
@@ -191,6 +327,44 @@ function resetPanels() {
   $("errorBox").style.display = "none";
   $("errorBox").textContent = "";
   $("exitBadge").textContent = "";
+  $("openObsidian").style.display = "none";
+  obsidianUri = null;
+  currentFiles = [];
+}
+
+function showError(msg) {
+  $("errorBox").textContent = msg;
+  $("errorBox").style.display = "block";
+}
+
+function showMigrateMsg(msg) {
+  $("migrateMsg").textContent = msg;
+}
+
+function setBusy(text) {
+  $("busy").textContent = text;
+  $("busy").style.display = text ? "inline" : "none";
+}
+
+// ---- vault 配置 ----
+
+async function loadConfig() {
+  try {
+    const j = await (await fetch("/api/config")).json();
+    if (j.vault) $("vaultInput").value = j.vault;
+    if (j.subdir) $("vaultSubdirInput").value = j.subdir;
+  } catch (e) { /* 配置读取失败不阻塞页面 */ }
+}
+
+function saveVaultConfig() {
+  fetch("/api/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      vault: $("vaultInput").value.trim(),
+      subdir: $("vaultSubdirInput").value.trim() || "B站字幕",
+    }),
+  }).catch(() => {});
 }
 
 async function checkCookie() {
@@ -211,14 +385,58 @@ async function checkCookie() {
   }
 }
 
+async function checkVault(create) {
+  const box = $("vaultCheckResult");
+  const p = $("vaultInput").value.trim();
+  if (!p) { box.textContent = "请先填写 vault 路径"; return; }
+  box.textContent = create ? "创建中…" : "检查中…";
+  try {
+    const resp = await fetch("/api/check-vault", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: p, create }),
+    });
+    const j = await resp.json();
+    const icon = !j.ok ? "❌ " : (j.is_vault_root ? "✅ " : "⚠️ ");
+    box.textContent = icon + j.message;
+    $("createVaultBtn").style.display = (!j.ok && j.can_create) ? "inline-block" : "none";
+    if (j.ok) saveVaultConfig();
+  } catch (e) {
+    box.textContent = "检查请求失败：" + e;
+  }
+}
+
+// ---- 提取 ----
+
+function collectTarget(startBody) {
+  if ($("modeDemo").checked) return true;
+  const source = $("sourceInput").value.trim();
+  if (!source) {
+    showError("请输入合集页链接（含 sid= 参数）、视频链接或 BV 号、多P视频链接、或纯数字 season_id");
+    $("sourceInput").focus();
+    return false;
+  }
+  startBody.source = source;
+  startBody.cookie = $("cookieInput").value.trim();
+  if ($("outVault").checked) {
+    const vault = $("vaultInput").value.trim();
+    if (!vault) {
+      showError("先填写 vault 路径，或切换到「输出到普通文件夹」");
+      $("vaultInput").focus();
+      return false;
+    }
+    startBody.vault = vault;
+    const subdir = $("vaultSubdirInput").value.trim();
+    if (subdir && subdir !== "B站字幕") startBody.vault_subdir = subdir;
+  } else {
+    startBody.output = $("outputInput").value.trim();
+  }
+  return true;
+}
+
 async function previewFirst() {
-  const demo = $("modeDemo").checked;
-  const body = {
-    demo,
-    source: $("sourceInput").value.trim(),
-    cookie: demo ? "" : $("cookieInput").value.trim(),
-  };
-  if (!demo && !body.source) { alert("请先输入合集页链接、视频链接或 BV 号"); return; }
+  const body = { demo: $("modeDemo").checked };
+  if (!collectTarget(body)) return;
   const btn = $("previewBtn");
   const old = btn.textContent;
   btn.disabled = true; btn.textContent = "预览提取中…";
@@ -240,8 +458,7 @@ async function previewFirst() {
     } else {
       $("viewerCard").hidden = false;
       $("viewerName").textContent = `第${j.episode_index}集 ${j.episode_title}（预览，未写盘）`;
-      $("mdView").innerHTML = renderMd(j.markdown);
-      $("rawView").textContent = j.markdown;
+      showViewerContent(j.markdown);
       $("viewerCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   } finally {
@@ -250,17 +467,12 @@ async function previewFirst() {
 }
 
 async function start() {
-  const demo = $("modeDemo").checked;
-  const body = {
-    demo,
-    source: $("sourceInput").value.trim(),
-    cookie: demo ? "" : $("cookieInput").value.trim(),
-    output: $("outputInput").value.trim(),
-  };
-  if (!demo && !body.source) { alert("请输入合集页链接（含 sid= 参数）、视频链接或 BV 号、或纯数字 season_id"); return; }
+  const body = { demo: $("modeDemo").checked };
+  if (!collectTarget(body)) return;
   resetPanels();
   $("startBtn").disabled = true;
-  $("busy").style.display = "inline";
+  $("migrateBtn").disabled = true;
+  setBusy("正在提取，全程串行 + 随机间隔…");
   const resp = await fetch("/api/extract", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -270,17 +482,83 @@ async function start() {
     const err = await resp.json().catch(() => ({ error: "请求失败 " + resp.status }));
     showError(err.error || "启动失败");
     $("startBtn").disabled = false;
-    $("busy").style.display = "none";
+    $("migrateBtn").disabled = false;
+    setBusy("");
     return;
   }
   pollTimer = setInterval(poll, 400);
   poll();
 }
 
-function showError(msg) {
-  $("errorBox").textContent = msg;
-  $("errorBox").style.display = "block";
+// ---- 迁移 ----
+
+async function scanLegacy() {
+  const dir = $("migrateDirInput").value.trim();
+  if (!dir) { showMigrateMsg("请先填写旧字幕目录"); return; }
+  showMigrateMsg("扫描中…");
+  $("scanList").innerHTML = "";
+  $("migrateBtn").disabled = true;
+  try {
+    const resp = await fetch("/api/migrate-scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dir }),
+    });
+    const j = await resp.json();
+    if (!resp.ok) { showMigrateMsg("扫描失败：" + (j.error || resp.status)); return; }
+    if (!j.collections.length) {
+      showMigrateMsg("未发现任何合集子文件夹（其下需含 .md 文件）" +
+        (j.loose_files.length ? `；另有 ${j.loose_files.length} 个散落文件不在合集内，不参与迁移` : ""));
+      return;
+    }
+    $("scanList").innerHTML = j.collections
+      .map((c) => `<label class="scanitem"><input type="checkbox" checked data-name="${esc(c.name)}"> ${esc(c.name)}（待迁移 ${c.pending.length}、已迁移 ${c.already.length}、无法解析 ${c.unparsable.length}）</label>`)
+      .join("");
+    showMigrateMsg(j.loose_files.length
+      ? `发现 ${j.collections.length} 个合集；另有 ${j.loose_files.length} 个散落文件不在合集内，不参与迁移`
+      : `发现 ${j.collections.length} 个合集`);
+    $("migrateBtn").disabled = false;
+  } catch (e) {
+    showMigrateMsg("扫描请求失败：" + e);
+  }
 }
+
+async function startMigrate() {
+  const names = [...document.querySelectorAll("#scanList input:checked")].map((i) => i.dataset.name);
+  if (!names.length) { showMigrateMsg("请至少勾选一个合集"); return; }
+  const vault = $("vaultInput").value.trim();
+  if (!vault) { showMigrateMsg("先在上方「提取设置」里配置 vault 路径"); return; }
+  const body = {
+    dir: $("migrateDirInput").value.trim(),
+    vault,
+    collections: names,
+    overwrite: $("overwriteChk").checked,
+  };
+  const subdir = $("vaultSubdirInput").value.trim();
+  if (subdir && subdir !== "B站字幕") body.vault_subdir = subdir;
+  resetPanels();
+  showMigrateMsg("");
+  $("startBtn").disabled = true;
+  $("migrateBtn").disabled = true;
+  setBusy("正在迁移（不联网）…");
+  const resp = await fetch("/api/migrate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: "请求失败 " + resp.status }));
+    showMigrateMsg("迁移启动失败：" + (err.error || resp.status));
+    $("startBtn").disabled = false;
+    $("migrateBtn").disabled = false;
+    setBusy("");
+    return;
+  }
+  pollTimer = setInterval(poll, 400);
+  poll();
+}
+
+// ---- 运行状态轮询 ----
 
 async function poll() {
   let s;
@@ -298,23 +576,60 @@ async function poll() {
   clearInterval(pollTimer);
   pollTimer = null;
   $("startBtn").disabled = false;
-  $("busy").style.display = "none";
+  $("migrateBtn").disabled = !$("scanList").innerHTML;
+  setBusy("");
 
   if (s.error) showError(s.error);
   if (s.summary != null) {
     $("summaryCard").hidden = false;
     $("summaryText").textContent = s.summary;
     const b = $("exitBadge");
-    b.className = "badge b" + s.exit_code;
+    b.className = "badge b" + (s.exit_code === 0 ? 0 : s.exit_code === 1 ? 1 : 2);
     b.textContent = "退出码 " + s.exit_code;
   }
+  if (s.obsidian_open) {
+    obsidianUri = s.obsidian_open;
+    $("openObsidian").style.display = "inline-block";
+  }
   if (s.files && s.files.length) {
+    currentFiles = s.files;
     $("filesCard").hidden = false;
     $("fileList").innerHTML = s.files
-      .map((name, i) => `<button class="filebtn${i === 0 ? " active" : ""}" onclick="openFile(this, '${esc(name).replace(/'/g, "&#39;")}')">${esc(name)}</button>`)
+      .map((f, i) => {
+        const name = esc(f.name).replace(/'/g, "&#39;");
+        return `<button class="filebtn${i === 0 ? " active" : ""}" onclick="openFile(this, '${name}')">${esc(f.name)}<span class="tag ${tagClass(f.badge)}">${esc(f.badge)}</span></button>`;
+      })
       .join("");
-    openFile($("fileList").firstChild, s.files[0]);
+    openFile($("fileList").firstChild, s.files[0].name);
   }
+}
+
+function openInObsidian() {
+  if (obsidianUri) window.open(obsidianUri, "_blank");
+}
+
+// ---- 文件查看 ----
+
+function showViewerContent(content) {
+  $("mdView").innerHTML = renderMd(content);
+  $("rawView").textContent = content;
+  if (rawMode) { $("mdView").style.display = "none"; $("rawView").style.display = "block"; }
+  else { $("mdView").style.display = "block"; $("rawView").style.display = "none"; }
+}
+
+async function openByName(name) {
+  const resp = await fetch("/api/file?name=" + encodeURIComponent(name));
+  if (!resp.ok) { showError("读取文件失败：" + name); return; }
+  const doc = await resp.json();
+  document.querySelectorAll(".filebtn").forEach((b) => b.classList.remove("active"));
+  const btn = [...document.querySelectorAll(".filebtn")].find(
+    (b) => b.textContent.replace(/\s*(新写入|跳过|迁移|失败|索引|已有)\s*$/, "") === name
+  );
+  if (btn) btn.classList.add("active");
+  $("viewerCard").hidden = false;
+  $("viewerName").textContent = doc.name;
+  showViewerContent(doc.content);
+  $("viewerCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function openFile(btn, name) {
@@ -325,10 +640,7 @@ async function openFile(btn, name) {
   const doc = await resp.json();
   $("viewerCard").hidden = false;
   $("viewerName").textContent = doc.name;
-  $("mdView").innerHTML = renderMd(doc.content);
-  $("rawView").textContent = doc.content;
-  if (rawMode) { $("mdView").style.display = "none"; $("rawView").style.display = "block"; }
-  else { $("mdView").style.display = "block"; $("rawView").style.display = "none"; }
+  showViewerContent(doc.content);
   $("viewerCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -339,7 +651,11 @@ function toggleRaw() {
   $("rawView").style.display = rawMode ? "block" : "none";
 }
 
+$("vaultInput").addEventListener("change", saveVaultConfig);
+$("vaultSubdirInput").addEventListener("change", saveVaultConfig);
 setMode();
+setOutMode();
+loadConfig();
 </script>
 </body>
 </html>
