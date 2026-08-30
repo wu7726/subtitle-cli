@@ -44,7 +44,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from subtitle_cli import storage  # noqa: E402
 from subtitle_cli.bilibili.client import BilibiliClient, normalize_cookie  # noqa: E402
 from subtitle_cli.bilibili.models import EpisodeStatus  # noqa: E402
-from subtitle_cli.dispatch import BILIBILI, PODCAST, create_client, detect_platform  # noqa: E402
+from subtitle_cli.dispatch import BILIBILI, DOUYIN, PODCAST, create_client, detect_platform  # noqa: E402
 from subtitle_cli.migration import (  # noqa: E402
     format_migration_summary,
     migrate,
@@ -191,7 +191,7 @@ def run_extract_job(
 ) -> None:
     try:
         platform = detect_platform(source)
-        if demo and platform == PODCAST:
+        if demo and platform != BILIBILI:
             _finish_error("演示模式使用内置B站示例数据，仅支持B站输入。", 2)
             return
         if demo and asr:
@@ -499,24 +499,30 @@ class Handler(BaseHTTPRequestHandler):
             vault_subdir = (data.get("vault_subdir") or "").strip()
             subdir_used = vault_subdir
             try:
-                if demo and detect_platform(source) == PODCAST:
+                if demo and detect_platform(source) != BILIBILI:
                     self._json({"error": "演示模式使用内置B站示例数据，仅支持B站输入"}, 400)
                     return
                 if vault:
                     # 传入即记住（PRD §5.1）；同时决定输出落点与笔记格式。
-                    # 播客输入落 podcast_subdir，B站落 subdir，互不干扰
+                    # 播客/抖音输入各自落专属文件夹，B站落 subdir，互不干扰
                     cfg = load_config()
                     cfg.vault = vault
                     platform = detect_platform(source)
                     if vault_subdir:
                         if platform == PODCAST:
                             cfg.podcast_subdir = vault_subdir
+                        elif platform == DOUYIN:
+                            cfg.douyin_subdir = vault_subdir
                         else:
                             cfg.subdir = vault_subdir
                     save_config(cfg)
                     cfg = load_config()
                     subdir_used = vault_subdir or (
-                        cfg.podcast_subdir if platform == PODCAST else cfg.subdir
+                        cfg.podcast_subdir
+                        if platform == PODCAST
+                        else cfg.douyin_subdir
+                        if platform == DOUYIN
+                        else cfg.subdir
                     )
                     output = str(collection_root(cfg, subdir_used))
                     note_mode = "obsidian"

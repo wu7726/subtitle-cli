@@ -11,18 +11,24 @@ import re
 
 from .bilibili.client import BilibiliClient
 from .bilibili.client import extract_bvid
+from .douyin.client import DouyinClient
 from .pipeline import PlatformClient
 from .podcast.client import PodcastClient
 
 BILIBILI = "bilibili"
 PODCAST = "podcast"
+DOUYIN = "douyin"
 
 
 def detect_platform(raw: str) -> str:
-    """输入 → 平台标识（bilibili / podcast）。永远有返回值，不抛。"""
+    """输入 → 平台标识（bilibili / podcast / douyin）。永远有返回值，不抛。"""
     text = (raw or "").strip()
     if "bilibili.com" in text or "b23.tv" in text:
         return BILIBILI
+    if "douyin.com" in text or "iesdouyin.com" in text:
+        return DOUYIN
+    if re.fullmatch(r"\d{15,20}", text or ""):
+        return DOUYIN  # 抖音视频 ID（15-20 位）；B站 season_id 更短
     if extract_bvid(text) or text.isdigit():
         return BILIBILI
     if "xiaoyuzhoufm.com" in text or "podcasts.apple.com" in text:
@@ -33,7 +39,10 @@ def detect_platform(raw: str) -> str:
 
 
 def create_client(raw: str, cookie: str | None = None) -> PlatformClient:
-    """按输入平台创建客户端；Cookie 只对B站有意义，播客侧直接忽略。"""
-    if detect_platform(raw) == PODCAST:
+    """按输入平台创建客户端；Cookie 只对B站有意义，其他平台直接忽略。"""
+    platform = detect_platform(raw)
+    if platform == PODCAST:
         return PodcastClient()
+    if platform == DOUYIN:
+        return DouyinClient()
     return BilibiliClient(cookie=cookie)

@@ -130,6 +130,8 @@ def run_collection(
         if getattr(client, "download_audio", None) is None:
             log("⚠️ 当前平台不支持音频下载，转写兜底不生效，无字幕的分集将保持无字幕")
             asr = False
+    elif getattr(client, "platform", "") == "douyin":
+        log("提示：抖音没有可直接抓取的字幕，加 --asr 开启本地语音转写才能出正文。")
 
     results: list[EpisodeResult] = []
     consecutive_risk = 0

@@ -15,7 +15,7 @@ import typer
 
 from .asr import AsrDependencyError
 from .bilibili.client import RiskControlError, normalize_cookie
-from .dispatch import BILIBILI, PODCAST, create_client, detect_platform
+from .dispatch import BILIBILI, DOUYIN, PODCAST, create_client, detect_platform
 from .errors import PlatformError
 from .pipeline import format_preview, has_failure, preview_first_episode, run_collection, summarize
 from .vault import collection_root, load_config, save_config
@@ -38,7 +38,7 @@ def main(
     source: str = typer.Argument(
         ...,
         help="B站：合集页 URL（含 sid= 或 season_id=）、合集内任一视频的 URL 或 BV 号、纯数字 season_id；"
-        "播客：RSS 地址或 Apple Podcasts 节目链接",
+        "播客：RSS 地址或 Apple Podcasts 节目链接；抖音：分享口令（含 v.douyin.com 短链）或视频页链接",
     ),
     output: Optional[Path] = typer.Option(
         None,
@@ -55,7 +55,7 @@ def main(
     vault_subdir: Optional[str] = typer.Option(
         None,
         "--vault-subdir",
-        help="vault 内字幕文件夹（默认 B站字幕，可嵌套如 学习/B站字幕；播客默认 播客字幕）",
+        help="vault 内字幕文件夹（默认 B站字幕，可嵌套；播客默认 播客字幕，抖音默认 抖音字幕）",
     ),
     cookie: Optional[str] = typer.Option(
         None,
@@ -106,16 +106,22 @@ def main(
         if vault_subdir:
             if platform == PODCAST:
                 cfg.podcast_subdir = vault_subdir
+            elif platform == DOUYIN:
+                cfg.douyin_subdir = vault_subdir
             else:
                 cfg.subdir = vault_subdir
         save_config(cfg)
     cfg = load_config()
     if output is None and cfg.vault.strip():
         note_mode = "obsidian"
-        subdir = vault_subdir or (
-            cfg.podcast_subdir if platform == PODCAST else cfg.subdir
+        default_subdir = (
+            cfg.podcast_subdir
+            if platform == PODCAST
+            else cfg.douyin_subdir
+            if platform == DOUYIN
+            else cfg.subdir
         )
-        output = collection_root(cfg, subdir)
+        output = collection_root(cfg, vault_subdir or default_subdir)
     else:
         note_mode = "plain"
         output = output if output is not None else Path(".")

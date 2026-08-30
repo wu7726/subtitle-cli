@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 DEFAULT_SUBDIR = "B站字幕"
 DEFAULT_PODCAST_SUBDIR = "播客字幕"
+DEFAULT_DOUYIN_SUBDIR = "抖音字幕"
 _OBSIDIAN_DIR = ".obsidian"
 _PROBE_NAME = ".subtitle-cli-write-probe"
 
@@ -24,6 +25,7 @@ class VaultConfig(BaseModel):
     vault: str = ""
     subdir: str = DEFAULT_SUBDIR
     podcast_subdir: str = DEFAULT_PODCAST_SUBDIR  # 播客笔记落点（CLI 未显式指定时使用）
+    douyin_subdir: str = DEFAULT_DOUYIN_SUBDIR  # 抖音笔记落点（CLI 未显式指定时使用）
 
 
 class VaultCheckStatus(BaseModel):

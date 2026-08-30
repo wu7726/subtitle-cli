@@ -1,0 +1,18 @@
+{
+  "status_code": 0,
+  "aweme_detail": {
+    "aweme_id": "7262554372352085267",
+    "desc": "如何把几段视频连接起来 合成完整视频 #手机技巧 #教程",
+    "create_time": 1690945200,
+    "author": {"nickname": "测试作者"},
+    "video": {
+      "duration": 125634,
+      "ratio": "1080p",
+      "play_addr": {"uri": "v0300base", "url_list": ["https://www.douyin.com/aweme/v1/play/?video_id=v0300base&line=0"]},
+      "bit_rate": [
+        {"gear_name": "normal_1080_0", "bit_rate": 1934501, "play_addr": {"uri": "v0300hi", "url_list": ["https://cdn.example.com/high.mp4"]}},
+        {"gear_name": "lower_540_0", "bit_rate": 712565, "play_addr": {"uri": "v0300lo", "url_list": ["https://cdn.example.com/low.mp4"]}}
+      ]
+    }
+  }
+}

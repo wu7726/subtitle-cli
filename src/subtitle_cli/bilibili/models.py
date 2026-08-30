@@ -25,7 +25,8 @@ class Episode(BaseModel):
     index: int  # 合集内序号，从 1 开始
     source_url: str = ""  # 单集页面链接（属性头 source 优先取它）
     transcript_url: str | None = None  # 现成文稿地址（播客；B站不使用）
-    audio_url: str = ""  # 音频地址（播客 enclosure；B站经 playurl 动态获取，不用此字段）
+    audio_url: str = ""  # 音频/视频直链（ASR 兜底下载用；B站经 playurl 动态获取）
+    published: str = ""  # 发布日期（抖音 create_time 等；B站不使用）
 
 
 class SubtitleLine(BaseModel):

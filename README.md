@@ -1,6 +1,6 @@
-# subtitle-cli —— B站合集 / 播客字幕提取器
+# subtitle-cli —— B站合集 / 播客 / 抖音字幕提取器
 
-输入一个B站合集链接（或合集里任意一个视频链接），一次性提取该合集**全部分集**的字幕（CC 字幕 + AI 字幕）；或输入一个**播客 RSS 地址 / Apple Podcasts 节目链接**，提取各单集的现成文稿。输出为可直接阅读的 Markdown 笔记，**直接写入 Obsidian vault**，形成可搜索、可双链跳转的知识库。适合看完合集后做笔记、喂给 AI 总结、离线阅读。
+输入一个B站合集链接（或合集里任意一个视频链接），一次性提取该合集**全部分集**的字幕（CC 字幕 + AI 字幕）；或输入一个**播客 RSS 地址 / Apple Podcasts 节目链接**，提取各单集的现成文稿；或输入一个**抖音分享口令/视频链接**，下载音频本地转写出正文。输出为可直接阅读的 Markdown 笔记，**直接写入 Obsidian vault**，形成可搜索、可双链跳转的知识库。适合看完合集后做笔记、喂给 AI 总结、离线阅读。
 
 > 定位：个人学习用途的轻量命令行工具，仅供个人使用。PRD 见 `PRD.md`。
 
@@ -9,6 +9,7 @@
 - 输入灵活：合集页 URL（含 `sid=` / `season_id=`）、**合集内单个视频的链接或 BV 号**（自动识别所属合集）、**多P视频链接**（视频选集 N/M 形态，按分P批量提取）、纯数字 season_id
 - **播客支持**：RSS 地址或 Apple Podcasts 节目链接 → 按发布时间正序编号提取各单集**现成文稿**（RSS 的 `podcast:transcript` 标签，支持 VTT/SRT/JSON/纯文本/HTML），笔记默认落 vault 的 `播客字幕/` 文件夹（可用 `--vault-subdir` 改）；没有文稿的单集归入「无字幕」。**注意**：实测中文播客极少数提供文稿标签（抽样 40 个热门节目为 0），英文播客覆盖较好；小宇宙网页端不公开 RSS，请从 App「复制 RSS 链接」后粘贴
 - **本地语音转写兜底（ASR）**：`--asr` 开启后，无字幕/无文稿的分集自动下载音频（B站音轨 / 播客 enclosure），用 faster-whisper 本地转写出正文——中文播客、无字幕B站视频全覆盖。模型从 ModelScope 下载（国内直连，支持断点续传）；有 NVIDIA 显卡且装了 CUDA/cuDNN 时自动用显卡，否则用 CPU（int8 量化）。纯音乐/无人声的分集会明确报失败而非产出空笔记
+- **抖音视频（单个）**：粘贴抖音 App「复制链接」得到的分享口令（含 v.douyin.com 短链，自动解析 302）、视频页或图文页链接 → 自动下载媒体并用本地转写出正文（抖音无可直接抓取的字幕，`--asr` 必开）；发布日期写入属性头 `published`，笔记默认落 vault 的 `抖音字幕/<作者>/`；合集/主页批量暂不支持
 - 自动翻页遍历全部分集，长合集（几十上百集）完整提取
 - 逐集获取字幕并选轨：人工 CC（zh-CN）优先，其次 AI 字幕（ai-zh），再退列表第一个
 - 输出纯文本 Markdown：分段拼好的自然段落，无时间轴
@@ -85,6 +86,10 @@ subtitle-cli <合集URL或season_id> --asr                          # 默认 sma
 subtitle-cli <合集URL或season_id> --asr --asr-limit 5            # 本次最多转写 5 集
 subtitle-cli <合集URL或season_id> --asr --asr-model medium       # 更准更慢：tiny/base/small/medium
 
+# 抖音单个视频：分享口令 / 短链 / 视频页链接均可（配合 --asr 本地转写）
+subtitle-cli "7.42 复制打开抖音 https://v.douyin.com/iAbCdEf/ 看视频" --asr
+subtitle-cli "https://www.douyin.com/video/7262554372352085267" --asr --vault "D:/Obsidian/MyVault"
+
 # 旧字幕迁移：把 output/ 里的已有合集转换成新格式写入 vault（不联网）
 subtitle-cli-migrate "output" --vault "D:/Obsidian/MyVault"
 subtitle-cli-migrate "output" --vault "D:/Obsidian/MyVault" --dry-run   # 只看计划不写盘
@@ -121,6 +126,10 @@ vault 模式（`--vault` 或网页配置）：
     └── <播客名>/
         ├── <播客名>.md          # 索引页（不写 season_id）
         └── EPNN 单集标题.md     # 有现成文稿的单集
+└── 抖音字幕/                    # 抖音笔记（按作者归档）
+    └── <作者昵称>/
+        ├── <作者昵称>.md        # 索引页
+        └── EP01 视频标题.md     # 本地转写出的正文
 ```
 
 普通文件夹模式（`--output`）结构相同，只是没有属性头与索引页。
