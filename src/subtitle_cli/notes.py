@@ -83,11 +83,17 @@ def _frontmatter(meta: EpisodeMeta) -> list[str]:
     ]
     if not meta.is_multi_p and meta.season_id:
         lines.append(f"season_id: {_yaml_scalar(meta.season_id)}")
+    # bvid 为空（离线迁移恢复不了）时链接同为空串，不拼出残缺 URL
+    url = (
+        episode_url(meta.bvid, meta.episode_index, is_multi_p=meta.is_multi_p)
+        if meta.bvid
+        else ""
+    )
     lines.extend(
         [
             f"bvid: {_yaml_scalar(meta.bvid)}",
             f"episode: {meta.episode_index}",
-            f"url: {_yaml_scalar(episode_url(meta.bvid, meta.episode_index, is_multi_p=meta.is_multi_p))}",
+            f"url: {_yaml_scalar(url)}",
             f"fetched_at: {meta.fetched_at.isoformat()}",
             f"fetched_by: {FETCHED_BY}",
         ]

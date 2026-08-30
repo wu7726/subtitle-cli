@@ -16,6 +16,7 @@ dev = ["pytest>=8.0"]
 
 [project.scripts]
 subtitle-cli = "subtitle_cli.cli:app"
+subtitle-cli-migrate = "subtitle_cli.migrate:app"
 
 [build-system]
 requires = ["hatchling"]

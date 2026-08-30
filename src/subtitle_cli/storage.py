@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
+from datetime import date
 from pathlib import Path
+from typing import Callable
 
-from . import config
+from . import config, notes
 
 # Windows 文件名非法字符 + Obsidian 双链保留字符（# 锚点、[] 链接语法、
 # ^ 块引用——出现在文件名里会让索引页双链永远失配，开发计划 §2.3）
@@ -76,3 +79,41 @@ def write_markdown(path: Path, content: str, *, overwrite: bool = False) -> None
     mode = "w" if overwrite else "x"
     with open(path, mode, encoding="utf-8", newline="\n") as f:
         f.write(content)
+
+
+_EP_STEM = re.compile(r"EP(\d+)\s+(.+)")
+
+
+def write_collection_index(
+    collection_dir: Path,
+    collection_name: str,
+    season_id: str | None,
+    fetched_at: date,
+    log: Callable[[str], None] = print,
+) -> Path | None:
+    """重生成合集索引页：条目从磁盘实况收集，保证双链与文件名永远一致
+    （开发计划 §2.3）。合集目录尚不存在时跳过；每次整页覆盖重写。
+
+    pipeline（obsidian 提取）与 migration（离线迁移）共用本函数。
+    """
+    if not collection_dir.is_dir():
+        return None
+    index_stem = collection_dirname(collection_name)
+    found: list[tuple[int, str, str]] = []
+    for md in collection_dir.glob("EP*.md"):
+        if md.stem == index_stem:  # 合集名以 EP 开头时避免把索引自收录
+            continue
+        match = _EP_STEM.fullmatch(md.stem)
+        if match:
+            found.append((int(match.group(1)), md.stem, match.group(2)))
+    found.sort(key=lambda item: item[0])
+    entries = [
+        notes.IndexEntry(stem=stem, alias=f"第{idx}集 {title}")
+        for idx, stem, title in found
+    ]
+    index_name = f"{index_stem}.md"
+    path = collection_dir / index_name
+    content = notes.build_index_note(collection_name, season_id, entries, fetched_at)
+    write_markdown(path, content, overwrite=True)
+    log(f"索引页已更新：{index_name}（{len(entries)} 集）")
+    return path

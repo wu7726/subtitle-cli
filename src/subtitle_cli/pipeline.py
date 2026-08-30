@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import date
 from pathlib import Path
 from typing import Callable, Literal, Protocol
@@ -175,8 +174,12 @@ def run_collection(
 
     index_path = None
     if note_mode == "obsidian":
-        index_path = _write_collection_index(
-            output_dir, collection_name, season_id, fetched, log
+        index_path = storage.write_collection_index(
+            Path(output_dir) / storage.collection_dirname(collection_name),
+            collection_name,
+            None if season_id.startswith("BV") else season_id,
+            fetched,
+            log,
         )
 
     unprocessed = len(episodes) - len(results)
@@ -207,45 +210,6 @@ def _episode_meta(
         is_multi_p=is_multi_p,
         fetched_at=fetched,
     )
-
-
-def _write_collection_index(
-    output_dir: Path,
-    collection_name: str,
-    season_id: str,
-    fetched: date,
-    log: Callable[[str], None],
-) -> Path | None:
-    """重生成合集索引页：条目从磁盘实况收集，保证双链与文件名永远一致。
-
-    合集目录尚不存在（一集都没落盘）时跳过；每次运行都整页覆盖重写。
-    """
-    collection_dir = Path(output_dir) / storage.collection_dirname(collection_name)
-    if not collection_dir.is_dir():
-        return None
-    index_stem = storage.collection_dirname(collection_name)
-    found: list[tuple[int, str, str]] = []
-    for md in collection_dir.glob("EP*.md"):
-        if md.stem == index_stem:  # 合集名以 EP 开头时避免把索引自收录
-            continue
-        match = re.fullmatch(r"EP(\d+)\s+(.+)", md.stem)
-        if match:
-            found.append((int(match.group(1)), md.stem, match.group(2)))
-    found.sort(key=lambda item: item[0])
-    entries = [
-        notes.IndexEntry(stem=stem, alias=f"第{idx}集 {title}") for idx, stem, title in found
-    ]
-    index_name = f"{index_stem}.md"
-    path = collection_dir / index_name
-    content = notes.build_index_note(
-        collection_name,
-        None if season_id.startswith("BV") else season_id,
-        entries,
-        fetched,
-    )
-    storage.write_markdown(path, content, overwrite=True)
-    log(f"索引页已更新：{index_name}（{len(entries)} 集）")
-    return path
 
 
 def _aggregate_reports(reports: list[AuditReport]) -> AuditReport | None:
