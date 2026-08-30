@@ -183,23 +183,25 @@ def test_web_vault_apis(tmp_path: Path):
 
 
 def test_page_structure_vault_elements(tmp_path: Path):
-    """M10：页面包含 vault/迁移/Obsidian 直达的关键元素与默认态。"""
+    """页面包含 vault/目录选择器/Obsidian 直达关键元素；迁移卡已移除。"""
     proc, base = _start_server(tmp_path)
     try:
         status, html = _get(base, "/")
         assert status == 200
         for key in [
-            'id="vaultInput"', 'id="vaultSubdirInput"', 'id="migrateCard"',
-            'id="scanBtn"', 'id="migrateBtn"', 'id="overwriteChk"',
+            'id="vaultInput"', 'id="vaultSubdirInput"',
             'id="openObsidian"', 'id="outVault"', 'id="outFolder"',
-            '写入 Obsidian vault（推荐）', '检查 vault', '创建该文件夹',
+            '写入 Obsidian vault（推荐）', '创建该文件夹',
             'id="outVault" checked', '在 Obsidian 中打开合集索引',
             'id="fileProtoBanner"',  # file:// 直接打开时的引导横幅
+            'id="browseModal"', '浏览…', '选择此文件夹',
         ]:
             assert key in html, key
-        # 默认态：输出位置区块随演示模式隐藏；迁移卡常显
+        # 迁移卡已按用户要求从网页移除（能力保留在 CLI：subtitle-cli-migrate）
+        assert 'id="migrateCard"' not in html
+        assert "迁移旧字幕" not in html
+        # 默认态：输出位置区块随演示模式隐藏
         assert 'id="outputSection" hidden' in html
-        assert '<section class="card" id="migrateCard">' in html
     finally:
         proc.terminate()
         try:
@@ -236,3 +238,34 @@ def test_port_conflict_fails_loudly(tmp_path: Path):
         assert "无法监听" in (proc.stderr + proc.stdout)
     finally:
         blocker.close()
+
+
+def test_browse_api(tmp_path: Path):
+    """/api/browse：盘符列表、子目录枚举、非法路径 400（问题2 目录浏览）。"""
+    proc, base = _start_server(tmp_path)
+    try:
+        status, text = _get(base, "/api/browse?path=")
+        assert status == 200
+        drives = json.loads(text)
+        assert drives["current"] == "" and drives["parent"] is None
+        assert drives["dirs"] and all("name" in d and "path" in d for d in drives["dirs"])
+
+        status, text = _get(
+            base, "/api/browse?path=" + urllib.parse.quote(str(REPO_ROOT))
+        )
+        assert status == 200
+        repo = json.loads(text)
+        assert {"docs", "src", "web", "tests"} <= {d["name"] for d in repo["dirs"]}
+        assert repo["parent"]
+
+        try:
+            _get(base, "/api/browse?path=" + urllib.parse.quote(str(tmp_path / "nope")))
+            raise AssertionError("应当返回 400")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 400
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()

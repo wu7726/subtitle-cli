@@ -44,7 +44,7 @@ python demo/run_demo.py
 python web/server.py        # 自动打开 http://127.0.0.1:8765
 ```
 
-网页支持「真实接口」模式（填入 Cookie 即可提取任意真实合集，Cookie 仅本次运行透传、不落盘），并默认把成果**直接写入 Obsidian vault**（首次填一次路径，之后自动回填）；「迁移旧字幕」卡片可把 `output/` 等旧目录离线转换入库。命令行 Demo 输出在 `demo_output/`，覆盖成功、AI 字幕回退（EP03）、无字幕（EP05）三类场景，并演示二次运行的增量跳过。
+网页支持「真实接口」模式（填入 Cookie 即可提取任意真实合集，Cookie 仅本次运行透传、不落盘），并默认把成果**直接写入 Obsidian vault**：vault 路径支持「浏览…」弹窗逐级点选（首次配置后记住），路径检查自动进行，无需手动输入。命令行 Demo 输出在 `demo_output/`，覆盖成功、AI 字幕回退（EP03）、无字幕（EP05）三类场景，并演示二次运行的增量跳过。
 
 ## 使用
 
@@ -105,21 +105,20 @@ vault 模式（`--vault` 或网页配置）：
 
 ### 笔记形态（vault 模式）
 
-每集笔记 = YAML 属性头 + 原有纯文本正文（正文与旧版完全一致）：
+每集笔记 = YAML 属性头（键名对齐 Obsidian Web Clipper 模板）+ 原有纯文本正文：
 
 ```markdown
 ---
-title: 第1集 视频标题
-collection: 合集名
-season_id: "12345"
-bvid: BV1xxxxxxxx
-episode: 1
-url: https://www.bilibili.com/video/BV1xxxxxxxx
-fetched_at: 2026-08-30
-fetched_by: subtitle-cli
+author: UP主昵称
+created: 2026-08-30
+description: ""
+published: ""
+source: "https://www.bilibili.com/video/BV1xxxxxxxx"
 tags:
   - B站字幕
   - 合集名
+title: 第1集 视频标题
+fetched_by: subtitle-cli
 ---
 
 # 第1集 视频标题
@@ -127,6 +126,8 @@ tags:
 大家好，今天我们来聊一聊……
 首先介绍一下背景……
 ```
+
+`author` 自动取合集 UP 主；`created` 是抓取日期；`source` 是视频链接（多P 带 `?p=序号`）；`description`/`published` 暂为空位；合集归属体现在 `tags` 与文件夹结构上。
 
 索引页 `<合集名>.md` 带 `type: index` 属性头，正文为全部分集的双链列表（`[[EP01 xxx|第1集 xxx]]`）；每次运行按磁盘实况重生成，保证双链与文件一致。多P 视频省略 `season_id`，`url` 带 `?p=序号`。
 

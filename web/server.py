@@ -323,11 +323,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             dirs = sorted(
                 (
-                    child.name
+                    {"name": child.name, "path": str(child)}
                     for child in target.iterdir()
                     if child.is_dir() and not child.name.startswith("$")
                 ),
-                key=str.casefold,
+                key=lambda item: item["name"].casefold(),
             )
             parent = target.parent
             self._json(
