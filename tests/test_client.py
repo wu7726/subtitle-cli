@@ -452,3 +452,60 @@ def test_resolve_bvid_risk_control_stays_risk_error():
         with pytest.raises(RiskControlError):
             h.client.resolve_input("BV1xx411c7mD")
     assert calls["n"] == 4  # 初始 + 3 次退避重试
+
+
+# ---- 登录态自检 ----
+def test_whoami_logged_in():
+    nav = {"code": 0, "data": {"isLogin": True, "uname": "测试用户", "mid": 42}}
+
+    # nav 由 ClientHarness 拦截应答，需显式传入 nav_payload
+    with ClientHarness(lambda req: httpx.Response(500), cookie="SESSDATA=abc", nav_payload=nav) as h:
+        logged_in, uname = h.client.whoami()
+    assert logged_in is True and uname == "测试用户"
+
+
+def test_whoami_not_logged_in():
+    nav = {"code": -101, "message": "账号未登录", "data": {"isLogin": False}}
+
+    with ClientHarness(lambda req: httpx.Response(200, json=nav)) as h:
+        logged_in, uname = h.client.whoami()
+    assert logged_in is False and uname == ""
+
+
+def test_fetch_subtitles_carries_aid_when_view_cached(load_fixture):
+    """多P流程中 view 已缓存：player 请求应带上 aid（对齐播放器请求形态）。"""
+    pagelist_payload = {
+        "code": 0,
+        "data": [
+            {"cid": 101, "page": 1, "part": "第一讲"},
+            {"cid": 102, "page": 2, "part": "第二讲"},
+        ],
+    }
+    view = {
+        "code": 0,
+        "data": {"bvid": "BV1DE0000001", "aid": 12345, "title": "多P", "videos": 2},
+    }
+    player = _player_with_subtitles(
+        [{"lan": "zh-CN", "lan_doc": "中文", "subtitle_url": "https://aisubtitle.hdslb.com/a.json"}]
+    )
+    subtitle_json = load_fixture("subtitle.json")
+    player_requests: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "wbi/view" in request.url.path:
+            return httpx.Response(200, json=view)
+        if "pagelist" in request.url.path:
+            return httpx.Response(200, json=pagelist_payload)
+        if "wbi/v2" in request.url.path:
+            player_requests.append(dict(request.url.params))
+            return httpx.Response(200, json=player)
+        return httpx.Response(200, json=subtitle_json)
+
+    with ClientHarness(handler) as h:
+        ident = h.client.resolve_input("BV1DE0000001")
+        _, episodes = h.client.list_episodes(ident)
+        track = h.client.fetch_subtitles(episodes[0])
+
+    assert track is not None and track.lan == "zh-CN"
+    assert player_requests[0]["aid"] == "12345"
+    assert player_requests[0]["cid"] == "101"

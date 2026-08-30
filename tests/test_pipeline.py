@@ -219,6 +219,49 @@ def test_summary_empty_collection():
     assert summarize(outcome) == "—— 汇总 ——\n成功 0（其中增量跳过 0）"
 
 
+# ---- 登录态自检 ----
+class FakeClientWithAuth(FakeClient):
+    def __init__(self, *args, logged_in=True, uname="测试用户", **kwargs):
+        super().__init__(*args, **kwargs)
+        self._logged_in = logged_in
+        self._uname = uname
+
+    def whoami(self):
+        return self._logged_in, self._uname
+
+
+def test_login_notice_logged_in(tmp_path: Path):
+    eps = make_episodes(1)
+    client = FakeClientWithAuth(episodes=eps, script={1: track_of("内容。")}, logged_in=True)
+    lines: list[str] = []
+    run_collection("100", tmp_path, client, log=lines.append)
+    assert any("已登录（测试用户）" in line for line in lines)
+
+
+def test_login_notice_warns_when_anonymous(tmp_path: Path):
+    eps = make_episodes(1)
+    client = FakeClientWithAuth(episodes=eps, script={1: None}, logged_in=False)
+    lines: list[str] = []
+    outcome = run_collection("100", tmp_path, client, log=lines.append)
+    warning = next(line for line in lines if "未登录" in line)
+    assert "SESSDATA" in warning
+    # 未登录仍然完整跑完流程（该集归入无字幕），不中断
+    assert outcome.results[0].status == EpisodeStatus.NO_SUBTITLE
+
+
+def test_login_selfcheck_failure_does_not_abort(tmp_path: Path):
+    class BrokenAuthClient(FakeClient):
+        def whoami(self):
+            raise BilibiliError("网络错误")
+
+    eps = make_episodes(1)
+    client = BrokenAuthClient(episodes=eps, script={1: track_of("内容。")})
+    lines: list[str] = []
+    outcome = run_collection("100", tmp_path, client, log=lines.append)
+    assert outcome.results[0].status == EpisodeStatus.SUCCESS
+    assert any("校验失败" in line for line in lines)
+
+
 # ---- 输入校验透传 ----
 def test_invalid_input_raises_value_error(tmp_path: Path):
     client = FakeClient()

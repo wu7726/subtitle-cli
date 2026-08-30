@@ -50,6 +50,13 @@ def main(
     """提取B站合集全部分集的字幕，保存为 Markdown 文件。"""
     _force_utf8_stdio()
     cookie = cookie or os.environ.get("BILI_COOKIE") or None
+    if cookie and "sessdata" not in cookie.lower():
+        typer.echo(
+            "Cookie 中没有发现 SESSDATA 字段，无法获取字幕列表。请从浏览器开发者"
+            "工具复制完整 Cookie 整串（至少包含 SESSDATA=...）。",
+            err=True,
+        )
+        raise typer.Exit(code=2)
 
     try:
         output.mkdir(parents=True, exist_ok=True)

@@ -38,6 +38,29 @@ class RunOutcome(BaseModel):
     unprocessed: int = 0  # 提前终止时未处理的分集数
 
 
+def _check_login(client: PlatformClient, log: Callable[[str], None]) -> None:
+    """登录态自检：B站不向未登录请求返回字幕列表，Cookie 无效必须显式提醒。
+
+    whoami 是 BilibiliClient 的增强能力（协议外可选），其他实现可没有。
+    """
+    whoami = getattr(client, "whoami", None)
+    if whoami is None:
+        return
+    try:
+        logged_in, uname = whoami()
+    except Exception:  # noqa: BLE001 - 自检失败不影响主流程
+        log("登录态：校验失败（网络或风控），继续尝试提取")
+        return
+    if logged_in:
+        log(f"登录态：已登录（{uname}）")
+    else:
+        log(
+            "⚠️ 未登录：B站不向未登录请求返回字幕列表，本次所有分集都将显示为"
+            "「无字幕」。请检查 Cookie 是否为从浏览器复制的完整整串（需含 "
+            "SESSDATA=），且未过期。"
+        )
+
+
 def episode_heading(episode: Episode) -> str:
     """Markdown 一级标题：第{N}集 标题；标题自带该序号前缀时不重复。"""
     prefix = f"第{episode.index}集"
@@ -57,6 +80,7 @@ def run_collection(
     season_id = client.resolve_input(raw_input)
     collection_name, episodes = client.list_episodes(season_id)
     log(f"合集《{collection_name}》共 {len(episodes)} 集，输出目录：{output_dir}")
+    _check_login(client, log)
 
     results: list[EpisodeResult] = []
     consecutive_risk = 0

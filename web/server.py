@@ -80,6 +80,15 @@ def start_demo() -> callable:
 def run_job(source: str, cookie: str | None, demo: bool, output_dir: str) -> None:
     restore = None
     try:
+        if not demo and cookie and "sessdata" not in cookie.lower():
+            STATE["error"] = (
+                "Cookie 中没有发现 SESSDATA 字段，无法获取字幕列表。请从浏览器"
+                "开发者工具（Network → 任意 api.bilibili.com 请求 → 请求头）复制"
+                "完整 Cookie 整串。"
+            )
+            STATE["exit_code"] = 2
+            STATE["phase"] = "error"
+            return
         if demo:
             # 演示模式同样支持粘贴视频链接（Mock 的 view 路由会反查出演示合集）；
             # 输入为空时使用默认演示合集链接

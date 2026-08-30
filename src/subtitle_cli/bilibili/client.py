@@ -229,6 +229,20 @@ class BilibiliClient:
             page_num += 1
         return name, episodes
 
+    def whoami(self) -> tuple[bool, str]:
+        """用当前 Cookie 校验登录态，返回 (是否登录, 昵称)。
+
+        B站不向未登录请求返回字幕列表（§5.5 实测），登录态自检用于把
+        "Cookie 无效 → 全部无字幕" 的隐性故障显性化。
+        """
+        payload = self._api_get(
+            NAV_URL, ok_codes=(0, -101), delay_range=config.LIST_DELAY_RANGE
+        )
+        data = payload.get("data") or {}
+        if data.get("isLogin"):
+            return True, str(data.get("uname") or f"mid={data.get('mid')}")
+        return False, ""
+
     def fetch_subtitles(self, episode: Episode) -> SubtitleTrack | None:
         """取该集字幕轨；无任何可用字幕时返回 None。
 
@@ -237,9 +251,14 @@ class BilibiliClient:
         """
         if episode.cid is None:
             episode.cid = self.fetch_cid(episode.bvid)
+        params: dict = {"bvid": episode.bvid, "cid": episode.cid}
+        cached_view = self._view_cache.get(episode.bvid)
+        if cached_view and cached_view.aid:
+            # 对齐播放器请求形态：已知 aid 时一并携带
+            params["aid"] = cached_view.aid
         payload = self._api_get(
             PLAYER_V2_URL,
-            params={"bvid": episode.bvid, "cid": episode.cid},
+            params=params,
             signed=True,
             delay_range=config.MEDIA_DELAY_RANGE,
         )
