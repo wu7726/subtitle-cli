@@ -3,6 +3,10 @@
 纯函数、确定性、无 I/O、无网络（开发计划 §0）。converter 产出的正文在
 本层原样外层包装，一字不动。YAML 为手写序列化：特殊值双引号包裹
 （借 json.dumps 转义，YAML 双引号标量兼容 JSON 转义），宁过度引号不欠。
+
+分集属性键对齐 Obsidian Web Clipper 模板（v1.2，用户指定）：
+author / created / description / published / source / tags / title，
+末尾附加内部标记 fetched_by（迁移「已处理」判定用）。
 """
 
 from __future__ import annotations
@@ -12,7 +16,7 @@ import re
 from datetime import date
 from typing import NamedTuple
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 FETCHED_BY = "subtitle-cli"  # 溯源字段，同时是迁移「已处理」判定标记
 BASE_TAG = "B站字幕"
@@ -20,15 +24,16 @@ INDEX_TAG = "索引"
 
 
 class EpisodeMeta(BaseModel):
-    """一集笔记的属性头来源。多P 视频 season_id 为空且省略该键。"""
+    """一集笔记的属性头来源。description / published 拿不到分集级数据，默认留空。"""
 
     title: str  # 一级标题文本，如「第1集 视频标题」
-    collection: str
-    season_id: str | None = None
-    bvid: str
-    episode_index: int
-    is_multi_p: bool = False
-    fetched_at: date
+    source: str = ""  # 视频链接（多P 带 ?p=N）
+    author: str = ""  # UP 主昵称
+    description: str = ""
+    published: str = ""
+    created: date  # 抓取日期
+    tags: list[str] = Field(default_factory=list)
+    collection: str = ""  # 仅供索引页/日志使用，不写入分集属性头
 
 
 class IndexEntry(NamedTuple):
@@ -42,6 +47,11 @@ def episode_url(bvid: str, index: int, *, is_multi_p: bool) -> str:
     """视频链接；多P 追加 ?p=序号（开发计划 §2.1）。"""
     url = f"https://www.bilibili.com/video/{bvid}"
     return f"{url}?p={index}" if is_multi_p else url
+
+
+def episode_tags(collection: str) -> list[str]:
+    """分集标签：基础标签 + 合集名（合集名为空时只留基础标签）。"""
+    return [BASE_TAG, collection] if collection.strip() else [BASE_TAG]
 
 
 # 无需引号即可安全内联的标量：字母/数字/下划线/CJK（含中文标点全角区）开头，
@@ -76,30 +86,22 @@ def _tag_lines(tags: list[str]) -> list[str]:
 
 
 def _frontmatter(meta: EpisodeMeta) -> list[str]:
-    """属性头键序固定（开发计划 M5）：缺字段的行为由 validate_meta 另行报告。"""
+    """键序对齐 Web Clipper 模板（字母序），fetched_by 内部标记殿后。"""
     lines = [
-        f"title: {_yaml_scalar(meta.title)}",
-        f"collection: {_yaml_scalar(meta.collection)}",
+        f"author: {_yaml_scalar(meta.author)}",
+        f"created: {meta.created.isoformat()}",
+        f"description: {_yaml_scalar(meta.description)}",
+        f"published: {_yaml_scalar(meta.published)}",
+        f"source: {_yaml_scalar(meta.source)}",
     ]
-    if not meta.is_multi_p and meta.season_id:
-        lines.append(f"season_id: {_yaml_scalar(meta.season_id)}")
-    # bvid 为空（离线迁移恢复不了）时链接同为空串，不拼出残缺 URL
-    url = (
-        episode_url(meta.bvid, meta.episode_index, is_multi_p=meta.is_multi_p)
-        if meta.bvid
-        else ""
-    )
+    lines.extend(_tag_lines(meta.tags))
     lines.extend(
         [
-            f"bvid: {_yaml_scalar(meta.bvid)}",
-            f"episode: {meta.episode_index}",
-            f"url: {_yaml_scalar(url)}",
-            f"fetched_at: {meta.fetched_at.isoformat()}",
+            f"title: {_yaml_scalar(meta.title)}",
             f"fetched_by: {FETCHED_BY}",
+            "---",  # 收栏
         ]
     )
-    lines.extend(_tag_lines([BASE_TAG, meta.collection]))
-    lines.append("---")  # 收栏
     return lines
 
 
@@ -202,16 +204,12 @@ def has_migration_marker(text: str) -> bool:
 
 
 def validate_meta(meta: EpisodeMeta) -> list[str]:
-    """缺失字段清单（键名）；url 由 bvid 派生，不单独检查。"""
+    """缺失字段清单（键名）。description / published 允许为空。"""
     missing: list[str] = []
     if not meta.title.strip():
         missing.append("title")
-    if not meta.collection.strip():
-        missing.append("collection")
-    if not meta.bvid.strip():
-        missing.append("bvid")
-    if meta.episode_index < 1:
-        missing.append("episode")
-    if not meta.is_multi_p and not (meta.season_id or "").strip():
-        missing.append("season_id")
+    if not meta.source.strip():
+        missing.append("source")
+    if not meta.tags:
+        missing.append("tags")
     return missing

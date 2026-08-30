@@ -129,7 +129,7 @@ def test_web_vault_apis(tmp_path: Path):
         assert state["kind"] == "migrate"
         target = vault / "B站字幕" / "旧合集"
         note = (target / "EP01 第一集.md").read_text(encoding="utf-8")
-        assert note.startswith("---\n") and 'bvid: ""' in note
+        assert note.startswith("---\n") and 'source: ""' in note
         assert state["files"][0]["badge"] == "索引"
         assert any(f["badge"] == "迁移" for f in state["files"])
         # vault 根有效 → 提供 obsidian:// 打开链接

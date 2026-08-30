@@ -1,7 +1,8 @@
-"""notes 单测：属性头序列化/索引页/wikilink/迁移标记（开发计划 M5）。
+"""notes 单测：属性头序列化/索引页/wikilink/迁移标记（开发计划 M5 + v1.2 属性模板）。
 
 锁定三条硬约束：
-1. frontmatter 键序固定，season_id 数字形必须保持字符串（双引号）；
+1. 属性键对齐 Obsidian Web Clipper 模板（author/created/description/published/
+   source/tags/title，fetched_by 内部标记殿后）；
 2. 正文一字不动——build_episode_note 只在成品外层包装；
 3. parse_frontmatter 与手写序列化互为 roundtrip。
 """
@@ -14,6 +15,7 @@ from subtitle_cli.notes import (
     EpisodeMeta,
     build_episode_note,
     build_index_note,
+    episode_tags,
     episode_url,
     has_migration_marker,
     parse_frontmatter,
@@ -25,12 +27,11 @@ from subtitle_cli.notes import (
 def meta(**kw) -> EpisodeMeta:
     base = dict(
         title="第1集 视频标题",
+        source="https://www.bilibili.com/video/BV1abc",
+        author="演示UP主",
+        created=date(2026, 8, 30),
+        tags=["B站字幕", "美食漫谈"],
         collection="美食漫谈",
-        season_id="12345",
-        bvid="BV1abc",
-        episode_index=1,
-        is_multi_p=False,
-        fetched_at=date(2026, 8, 30),
     )
     base.update(kw)
     return EpisodeMeta(**base)
@@ -40,17 +41,16 @@ def test_episode_note_snapshot():
     out = build_episode_note(meta(), "# 第1集 视频标题\n\n大家好。\n")
     assert out == (
         "---\n"
-        "title: 第1集 视频标题\n"
-        "collection: 美食漫谈\n"
-        'season_id: "12345"\n'
-        "bvid: BV1abc\n"
-        "episode: 1\n"
-        'url: "https://www.bilibili.com/video/BV1abc"\n'
-        "fetched_at: 2026-08-30\n"
-        f"fetched_by: {FETCHED_BY}\n"
+        "author: 演示UP主\n"
+        "created: 2026-08-30\n"
+        'description: ""\n'
+        'published: ""\n'
+        'source: "https://www.bilibili.com/video/BV1abc"\n'
         "tags:\n"
         "  - B站字幕\n"
         "  - 美食漫谈\n"
+        "title: 第1集 视频标题\n"
+        f"fetched_by: {FETCHED_BY}\n"
         "---\n"
         "\n"
         "# 第1集 视频标题\n"
@@ -59,17 +59,21 @@ def test_episode_note_snapshot():
     )
 
 
-def test_multi_p_omits_season_id_and_url_has_page_param():
+def test_multi_p_source_carries_page_param():
     out = build_episode_note(
-        meta(is_multi_p=True, season_id="BV1abc", episode_index=2), "# 第2P 标题\n"
+        meta(source=episode_url("BV1abc", 2, is_multi_p=True)), "# 第2P 标题\n"
     )
-    assert "season_id" not in out
-    assert 'url: "https://www.bilibili.com/video/BV1abc?p=2"' in out
+    assert 'source: "https://www.bilibili.com/video/BV1abc?p=2"' in out
 
 
 def test_episode_url_branches():
     assert episode_url("BV1x", 1, is_multi_p=False) == "https://www.bilibili.com/video/BV1x"
     assert episode_url("BV1x", 3, is_multi_p=True) == "https://www.bilibili.com/video/BV1x?p=3"
+
+
+def test_episode_tags():
+    assert episode_tags("美食漫谈") == ["B站字幕", "美食漫谈"]
+    assert episode_tags("  ") == ["B站字幕"]
 
 
 def test_body_passed_through_unchanged():
@@ -86,11 +90,11 @@ def test_title_with_special_chars_roundtrip():
 
 
 def test_numeric_looking_strings_stay_strings():
-    out = build_episode_note(meta(title="2024", collection="2048"), "# t\n")
+    out = build_episode_note(meta(title="2024", author="2048"), "# t\n")
     fm = parse_frontmatter(out)
     assert fm is not None
     assert fm["title"] == "2024"
-    assert fm["collection"] == "2048"
+    assert fm["author"] == "2048"
 
 
 def test_yaml_scalar_uses_json_escaping():
@@ -170,7 +174,6 @@ def test_migration_marker_positive_and_negative():
 
 def test_validate_meta_missing_fields():
     assert validate_meta(meta()) == []
-    assert validate_meta(meta(is_multi_p=True)) == []
-    assert validate_meta(meta(season_id="")) == ["season_id"]
-    assert validate_meta(meta(collection="", bvid="")) == ["collection", "bvid"]
-    assert validate_meta(meta(episode_index=0)) == ["episode"]
+    assert validate_meta(meta(source="")) == ["source"]
+    assert validate_meta(meta(title="")) == ["title"]
+    assert validate_meta(meta(tags=[])) == ["tags"]

@@ -302,6 +302,41 @@ class Handler(BaseHTTPRequestHandler):
             self._json(snapshot)
         elif path == "/api/config":
             self._json(load_config().model_dump())
+        elif path == "/api/browse":
+            # 目录浏览：path 为空返回盘符列表（Windows），否则返回该目录下的子文件夹。
+            # 本地个人工具，配合网页「浏览…」按钮代替手动输入路径
+            q = parse_qs(urlparse(self.path).query)
+            raw = (q.get("path") or [""])[0].strip()
+            if not raw:
+                import string
+
+                drives = [
+                    {"name": f"{d}:", "path": f"{d}:\\"}
+                    for d in string.ascii_uppercase
+                    if Path(f"{d}:/").exists()
+                ]
+                self._json({"current": "", "parent": None, "dirs": drives})
+                return
+            target = Path(raw).expanduser()
+            if not target.is_dir():
+                self._json({"error": f"目录不存在：{raw}"}, 400)
+                return
+            dirs = sorted(
+                (
+                    child.name
+                    for child in target.iterdir()
+                    if child.is_dir() and not child.name.startswith("$")
+                ),
+                key=str.casefold,
+            )
+            parent = target.parent
+            self._json(
+                {
+                    "current": str(target),
+                    "parent": str(parent) if parent != target else None,
+                    "dirs": dirs,
+                }
+            )
         elif path == "/api/file":
             q = parse_qs(urlparse(self.path).query)
             name = (q.get("name") or [""])[0]

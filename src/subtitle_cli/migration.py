@@ -239,12 +239,11 @@ def _migrate_collection(
         title = note.heading or f"第{note.index}集 {note.filename_title}"
         meta = notes.EpisodeMeta(
             title=title,
+            source="",
+            author="",
+            created=fetched_at,
+            tags=notes.episode_tags(scan.name),
             collection=scan.name,
-            season_id=None,
-            bvid="",
-            episode_index=note.index,
-            is_multi_p=False,
-            fetched_at=fetched_at,
         )
         content = notes.build_episode_note(meta, note.text)
         if not dry_run:
@@ -260,7 +259,7 @@ def _migrate_collection(
                 continue
         outcomes.append(
             FileOutcome(source=source, target=str(target), status="migrated",
-                        missing_fields=["bvid", "url"])
+                        missing_fields=["source", "author"])
         )
 
     index_path = None
@@ -298,7 +297,7 @@ def format_migration_summary(outcome: MigrationOutcome) -> str:
         )
         lines.append(f"失败 {len(failed)}：{labels}")
     if migrated:
-        lines.append("缺失字段：bvid、url（离线迁移无法恢复，已留空）")
+        lines.append("缺失字段：source、author（离线迁移无法恢复，已留空）")
     if outcome.loose_files:
         lines.append(f"未处理的散落文件 {len(outcome.loose_files)} 个（不在合集子文件夹内）")
     if outcome.vault_dir:

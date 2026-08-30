@@ -73,8 +73,8 @@ def test_migrate_end_to_end(tmp_path: Path):
     target = vault / "B站字幕" / "旧合集"
     note = (target / "EP01 第一集.md").read_text(encoding="utf-8")
     assert note.startswith("---\n")
-    assert "bvid: \"\"" in note and "url: \"\"" in note  # 缺失字段留空
-    assert "collection: 旧合集" in note
+    assert "source: \"\"" in note and "author: \"\"" in note  # 缺失字段留空
+    assert "tags:\n  - B站字幕\n  - 旧合集" in note
     assert "# 第1集 第一集\n\n大家好。\n\n再见。\n" in note  # 正文一字不动
     assert (target / "EP02 第二集.md").exists()
 
@@ -86,7 +86,7 @@ def test_migrate_end_to_end(tmp_path: Path):
     summary = format_migration_summary(outcome)
     assert "成功 2（迁移 2、跳过 0）" in summary
     assert "失败 2" in summary  # 乱起名 + 坏编码
-    assert "缺失字段：bvid、url" in summary
+    assert "缺失字段：source、author" in summary
     assert "散落文件 1 个" in summary
 
 

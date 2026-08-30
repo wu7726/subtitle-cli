@@ -104,6 +104,12 @@ class UgcSeason(BaseModel):
     title: str = ""
 
 
+class VideoOwner(BaseModel):
+    """视频 UP 主（view 接口的 owner 字段，笔记属性 author 来源）。"""
+
+    name: str = ""
+
+
 class ViewData(BaseModel):
     """x/web-interface/wbi/view 的 data 部分（只声明用到的字段）。"""
 
@@ -112,3 +118,4 @@ class ViewData(BaseModel):
     title: str = ""
     videos: int = 1  # 分P数量
     ugc_season: UgcSeason | None = None
+    owner: VideoOwner | None = None

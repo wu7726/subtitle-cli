@@ -205,6 +205,7 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                         "data": {
                             "bvid": q.get("bvid", [""])[0],
                             "ugc_season": {"id": int(SEASON_ID), "title": COLLECTION_NAME},
+                            "owner": {"name": "演示UP主"},
                         },
                     }
                 )

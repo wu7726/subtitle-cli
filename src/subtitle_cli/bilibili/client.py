@@ -268,6 +268,14 @@ class BilibiliClient:
             return True, str(data.get("uname") or f"mid={data.get('mid')}")
         return False, ""
 
+    def uploader_name(self, bvid: str) -> str:
+        """视频 UP 主昵称（view 接口，带缓存；失败返回空串，不阻断主流程）。"""
+        try:
+            view = self._fetch_view(bvid)
+        except BilibiliError:
+            return ""
+        return view.owner.name if view.owner else ""
+
     def fetch_subtitles(self, episode: Episode) -> SubtitleTrack | None:
         """取该集字幕轨；无任何可用字幕时返回 None。
 

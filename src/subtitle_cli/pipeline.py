@@ -107,6 +107,7 @@ def run_collection(
     season_id = client.resolve_input(raw_input)
     collection_name, episodes = client.list_episodes(season_id)
     fetched = fetched_at or date.today()
+    author = _uploader_of(client, episodes)
     log(f"合集《{collection_name}》共 {len(episodes)} 集，输出目录：{output_dir}")
     _check_login(client, log)
 
@@ -157,7 +158,7 @@ def run_collection(
         content = body
         if note_mode == "obsidian":
             content = notes.build_episode_note(
-                _episode_meta(collection_name, season_id, episode, fetched), body
+                _episode_meta(collection_name, season_id, episode, fetched, author), body
             )
         reports.append(audit_markdown(body, cleaning))
         try:
@@ -196,19 +197,40 @@ def run_collection(
     )
 
 
+def _uploader_of(client: PlatformClient, episodes: list[Episode]) -> str:
+    """合集 UP 主昵称（取第 1 集 bvid 反查，全合集同主；协议外可选能力）。
+
+    uploader_name 是 BilibiliClient 的增强（如 whoami），其他实现可没有；
+    任何失败都只让 author 留空，不阻断提取。
+    """
+    uploader = getattr(client, "uploader_name", None)
+    if uploader is None or not episodes:
+        return ""
+    try:
+        return uploader(episodes[0].bvid) or ""
+    except Exception:  # noqa: BLE001 - 属性头辅助信息，失败不影响主流程
+        return ""
+
+
 def _episode_meta(
-    collection_name: str, season_id: str, episode: Episode, fetched: date
+    collection_name: str,
+    season_id: str,
+    episode: Episode,
+    fetched: date,
+    author: str = "",
 ) -> notes.EpisodeMeta:
-    """一集的属性头来源；多P 以 season_id 以 BV 开头为判定（开发计划 §2.1）。"""
+    """一集的属性头来源；多P 以 season_id 以 BV 开头为判定（开发计划 §2.1）。
+
+    属性键对齐 Obsidian Web Clipper 模板：author/created/source/tags/title。
+    """
     is_multi_p = season_id.startswith("BV")
     return notes.EpisodeMeta(
         title=episode_heading(episode),
+        source=notes.episode_url(episode.bvid, episode.index, is_multi_p=is_multi_p),
+        author=author,
+        created=fetched,
+        tags=notes.episode_tags(collection_name),
         collection=collection_name,
-        season_id=None if is_multi_p else season_id,
-        bvid=episode.bvid,
-        episode_index=episode.index,
-        is_multi_p=is_multi_p,
-        fetched_at=fetched,
     )
 
 
@@ -298,7 +320,10 @@ def preview_first_episode(
     markdown = body
     meta: notes.EpisodeMeta | None = None
     if note_mode == "obsidian" and track:
-        meta = _episode_meta(collection_name, season_id, first, date.today())
+        meta = _episode_meta(
+            collection_name, season_id, first, date.today(),
+            _uploader_of(client, episodes),
+        )
         markdown = notes.build_episode_note(meta, body)
     audit = audit_markdown(body, cleaning)
 

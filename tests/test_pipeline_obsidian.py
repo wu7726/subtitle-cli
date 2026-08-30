@@ -47,9 +47,10 @@ def test_obsidian_mode_wraps_frontmatter_and_builds_index(tmp_path: Path):
     )
     text = _read(tmp_path, "测试合集", "EP01 标题1.md")
     assert text.startswith("---\n")
-    assert 'season_id: "123"' in text
-    assert 'url: "https://www.bilibili.com/video/BV01"' in text
-    assert "fetched_at: 2026-01-02" in text
+    assert 'source: "https://www.bilibili.com/video/BV01"' in text
+    assert "created: 2026-01-02" in text
+    assert 'author: ""' in text  # FakeClient 无 uploader_name 能力 → 留空
+    assert "tags:\n  - B站字幕\n  - 测试合集" in text
     assert "fetched_by: subtitle-cli" in text
     # 正文一字不动
     assert "# 第1集 标题1\n\n大家好。\n" in text
@@ -76,10 +77,9 @@ def test_obsidian_multi_p_omits_season_id_and_urls_carry_page(tmp_path: Path):
         note_mode="obsidian", fetched_at=FIXED_DATE,
     )
     text1 = _read(tmp_path, "测试合集", "EP01 P1.md")
-    assert "season_id" not in text1
-    assert 'url: "https://www.bilibili.com/video/BV1x?p=1"' in text1
+    assert 'source: "https://www.bilibili.com/video/BV1x?p=1"' in text1
     text2 = _read(tmp_path, "测试合集", "EP02 P2.md")
-    assert 'url: "https://www.bilibili.com/video/BV1x?p=2"' in text2
+    assert 'source: "https://www.bilibili.com/video/BV1x?p=2"' in text2
     index = _read(tmp_path, "测试合集", "测试合集.md")
     assert "season_id" not in index
 
