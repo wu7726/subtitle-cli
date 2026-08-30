@@ -78,10 +78,12 @@ def test_web_ui_offline_demo_and_error_paths(tmp_path: Path):
         assert "成功 5（其中增量跳过 0）" in state["summary"]
         assert "无字幕  1：EP05" in state["summary"]
         assert len(state["files"]) == 5
-        assert any("EP01 早餐的哲学.md" in name for name in state["files"])
+        names = [f["name"] for f in state["files"]]
+        assert any("EP01 早餐的哲学.md" in name for name in names)
+        assert all(f["badge"] == "新写入" for f in state["files"])  # plain 模式无索引页
 
         # 读取成果文件（Markdown 内容）
-        query = urllib.parse.urlencode({"name": state["files"][0]})
+        query = urllib.parse.urlencode({"name": state["files"][0]["name"]})
         status, doc = _get(base, "/api/file?" + query)
         assert status == 200
         doc = json.loads(doc)

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -38,6 +39,10 @@ class VaultCheckStatus(BaseModel):
 
 
 def config_path() -> Path:
+    """配置文件位置；SUBTITLE_CLI_CONFIG 环境变量可覆盖（测试/多实例用）。"""
+    override = os.environ.get("SUBTITLE_CLI_CONFIG")
+    if override:
+        return Path(override)
     return Path.home() / ".subtitle-cli" / "config.json"
 
 
