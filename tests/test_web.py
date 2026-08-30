@@ -110,6 +110,21 @@ def test_web_ui_offline_demo_and_error_paths(tmp_path: Path):
         assert state["phase"] == "error" and state["exit_code"] == 2
         assert "无法从输入中识别合集" in (state["error"] or "")
 
+        # 演示模式 + 视频链接输入：BV → view 反查合集 → 爬取整个合集（全新输出目录）
+        status, resp = _post(
+            base, "/api/extract",
+            {
+                "demo": True,
+                "source": "https://www.bilibili.com/video/BV1DE0000001/",
+                "output": str(tmp_path / "out_video"),
+            },
+        )
+        assert status == 200
+        state = _wait_done(base)
+        assert state["phase"] == "done" and state["exit_code"] == 0
+        assert "成功 5（其中增量跳过 0）" in state["summary"]
+        assert len(state["files"]) == 5
+
         # 运行中重复提交 → 409
         _post(base, "/api/extract", {"demo": True, "output": str(tmp_path / "out3")})
         status, resp = _post(base, "/api/extract", {"demo": True, "output": str(tmp_path / "out4")})

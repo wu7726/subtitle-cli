@@ -91,6 +91,7 @@
     <div id="demoHint" class="hint">
       演示合集《示例合集·美食漫谈》共 6 集，覆盖三类结果：CC 字幕选轨、AI 字幕回退（EP03）、无字幕（EP05）。
       本地 Mock 服务回放B站接口结构，CLI / 转换 / 落盘全部走真实代码。
+      输入框已预填演示合集第 1 集的视频链接——就像真实场景一样，粘贴合集里任意一个视频网址即可自动识别并爬取整个合集；也可清空使用合集链接。
     </div>
     <label for="outputInput">输出目录</label>
     <input type="text" id="outputInput" placeholder="默认：仓库目录下 output/">
@@ -133,11 +134,17 @@ const $ = (id) => document.getElementById(id);
 let pollTimer = null;
 let rawMode = false;
 
+const DEMO_VIDEO_URL = "https://www.bilibili.com/video/BV1DE0000001/";
+
 function setMode() {
   const demo = $("modeDemo").checked;
-  $("sourceInput").disabled = demo;
   $("cookieRow").hidden = demo;
   $("demoHint").hidden = !demo;
+  if (demo) {
+    if (!$("sourceInput").value.trim()) $("sourceInput").value = DEMO_VIDEO_URL;
+  } else if ($("sourceInput").value.trim() === DEMO_VIDEO_URL) {
+    $("sourceInput").value = "";
+  }
 }
 
 function esc(s) {
@@ -180,11 +187,11 @@ async function start() {
   const demo = $("modeDemo").checked;
   const body = {
     demo,
-    source: demo ? "" : $("sourceInput").value.trim(),
+    source: $("sourceInput").value.trim(),
     cookie: demo ? "" : $("cookieInput").value.trim(),
     output: $("outputInput").value.trim(),
   };
-  if (!demo && !body.source) { alert("请输入合集页链接（含 sid= 参数）或纯数字 season_id"); return; }
+  if (!demo && !body.source) { alert("请输入合集页链接（含 sid= 参数）、视频链接或 BV 号、或纯数字 season_id"); return; }
   resetPanels();
   $("startBtn").disabled = true;
   $("busy").style.display = "inline";

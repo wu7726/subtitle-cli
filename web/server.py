@@ -60,9 +60,9 @@ def _fresh_state() -> dict:
 STATE: dict = _fresh_state()
 
 
-def start_demo() -> tuple[str, callable]:
-    """启动本地 Mock 并把接口层指过去，返回 (演示用 source, 恢复函数)。"""
-    from demo.run_demo import DEMO_SOURCE, make_handler, patch_client_to
+def start_demo() -> callable:
+    """启动本地 Mock 并把接口层指过去，返回恢复函数。"""
+    from demo.run_demo import make_handler, patch_client_to
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler())
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -74,14 +74,19 @@ def start_demo() -> tuple[str, callable]:
         server.shutdown()
         server.server_close()
 
-    return DEMO_SOURCE, stop
+    return stop
 
 
 def run_job(source: str, cookie: str | None, demo: bool, output_dir: str) -> None:
     restore = None
     try:
         if demo:
-            source, restore = start_demo()
+            # 演示模式同样支持粘贴视频链接（Mock 的 view 路由会反查出演示合集）；
+            # 输入为空时使用默认演示合集链接
+            from demo.run_demo import DEMO_SOURCE
+
+            restore = start_demo()
+            source = (source or "").strip() or DEMO_SOURCE
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         with BilibiliClient(cookie=cookie or None) as client:
             outcome = run_collection(
@@ -178,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
                 running=True,
                 phase="running",
                 demo=demo,
-                source=source if not demo else "(内置演示合集)",
+                source=(source or "").strip() or ("(内置演示合集)" if demo else ""),
                 output_dir=output,
             )
         threading.Thread(target=run_job, args=(source, cookie, demo, output), daemon=True).start()

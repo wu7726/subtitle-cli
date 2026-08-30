@@ -132,7 +132,10 @@ def subtitle_payload(ep_index: int, form: str) -> dict:
 
 
 def bvid_of(index: int) -> str:
-    return f"BV1DE000{index:03d}"  # BV + 10 位，与真实 BV 号长度一致
+    return f"BV1DE0000{index:03d}"  # BV + 10 位，与真实 BV 号长度一致
+
+
+DEMO_VIDEO_URL = f"https://www.bilibili.com/video/{bvid_of(1)}/"  # 演示合集第 1 集
 
 
 def index_of(bvid: str) -> int:
@@ -193,6 +196,18 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                         },
                     }
                 )
+            elif path == "/x/web-interface/wbi/view":
+                # 视频 → 所属合集（演示模式下任何 BV 都指向演示合集）
+                self._send_json(
+                    {
+                        "code": 0,
+                        "message": "0",
+                        "data": {
+                            "bvid": q.get("bvid", [""])[0],
+                            "ugc_season": {"id": int(SEASON_ID), "title": COLLECTION_NAME},
+                        },
+                    }
+                )
             elif path == "/x/player/pagelist":
                 index = index_of(q["bvid"][0])
                 cid = 900000 + index
@@ -240,6 +255,7 @@ def patch_client_to(base: str, *, speedup: bool = True):
     """把接口层指向指定 base（Mock 服务），返回恢复函数。
 
     speedup=True 时压缩随机间隔（演示模式）；真实运行保持 config 默认值。
+    注意：client 新增的端点 URL 常量必须同步加入此处，否则会打到真实接口。
     """
     originals = [
         (client_module, "API_BASE", client_module.API_BASE),
@@ -247,6 +263,7 @@ def patch_client_to(base: str, *, speedup: bool = True):
         (client_module, "PAGELIST_URL", client_module.PAGELIST_URL),
         (client_module, "PLAYER_V2_URL", client_module.PLAYER_V2_URL),
         (client_module, "NAV_URL", client_module.NAV_URL),
+        (client_module, "VIEW_URL", client_module.VIEW_URL),
         (config, "LIST_DELAY_RANGE", config.LIST_DELAY_RANGE),
         (config, "MEDIA_DELAY_RANGE", config.MEDIA_DELAY_RANGE),
     ]
@@ -255,6 +272,7 @@ def patch_client_to(base: str, *, speedup: bool = True):
     client_module.PAGELIST_URL = f"{base}/x/player/pagelist"
     client_module.PLAYER_V2_URL = f"{base}/x/player/wbi/v2"
     client_module.NAV_URL = f"{base}/x/web-interface/nav"
+    client_module.VIEW_URL = f"{base}/x/web-interface/wbi/view"
     if speedup:
         config.LIST_DELAY_RANGE = (0.02, 0.06)
         config.MEDIA_DELAY_RANGE = (0.03, 0.09)
