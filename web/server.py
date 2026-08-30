@@ -63,6 +63,15 @@ INDEX_HTML = REPO_ROOT / "web" / "index.html"
 _lock = threading.Lock()
 
 
+class LocalServer(ThreadingHTTPServer):
+    """本地服务。Windows 下禁用 SO_REUSEADDR：默认行为允许第二个进程静默
+    绑定同一端口，请求会被随机路由到（可能僵死的）旧实例，表现为页面能
+    打开但接口时好时坏（Failed to fetch）。改为显式失败并提示。"""
+
+    allow_reuse_address = os.name != "nt"
+    daemon_threads = True
+
+
 def _fresh_state() -> dict:
     return {
         "running": False,
@@ -134,7 +143,7 @@ def start_demo() -> str:
     """启动本地 Mock 并把接口层指过去，返回其 base URL（恢复用 stop_demo）。"""
     from demo.run_demo import make_handler, patch_client_to
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler())
+    server = LocalServer(("127.0.0.1", 0), make_handler())
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
     restore_urls = patch_client_to(base, speedup=True)
@@ -530,7 +539,16 @@ def main() -> None:
     parser.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
     args = parser.parse_args()
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    try:
+        server = LocalServer(("127.0.0.1", args.port), Handler)
+    except OSError as exc:
+        print(f"端口 {args.port} 无法监听：{exc}", file=sys.stderr)
+        print(
+            "很可能是旧的 web/server.py 还在运行：请先关闭它的窗口（或用任务管理器结束"
+            " python 进程），再重新启动；也可以换一个端口，如 --port 8766。",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None
     port = server.server_address[1]
     url = f"http://127.0.0.1:{port}"
     print(f"PORT={port}", flush=True)

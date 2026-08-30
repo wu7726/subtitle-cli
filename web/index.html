@@ -229,6 +229,22 @@ function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+async function postJSON(url, body) {
+  try {
+    return await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    throw new Error(
+      "无法连接本地服务。最常见原因：端口上有旧的 server.py 残留进程。" +
+        "请关闭所有 server.py 窗口后重新运行 python web/server.py，" +
+        "并用系统浏览器（Edge/Chrome）打开 http://127.0.0.1:8765"
+    );
+  }
+}
+
 function unquote(s) {
   s = s.trim();
   if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
@@ -373,15 +389,11 @@ async function checkCookie() {
   if (!raw) { box.textContent = "请先粘贴 Cookie"; return; }
   box.textContent = "检测中…";
   try {
-    const resp = await fetch("/api/check-cookie", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cookie: raw }),
-    });
+    const resp = await postJSON("/api/check-cookie", { cookie: raw });
     const j = await resp.json();
     box.textContent = (j.ok ? "✅ " : "❌ ") + j.message;
   } catch (e) {
-    box.textContent = "检测请求失败：" + e;
+    box.textContent = "❌ " + e.message;
   }
 }
 
@@ -391,18 +403,14 @@ async function checkVault(create) {
   if (!p) { box.textContent = "请先填写 vault 路径"; return; }
   box.textContent = create ? "创建中…" : "检查中…";
   try {
-    const resp = await fetch("/api/check-vault", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: p, create }),
-    });
+    const resp = await postJSON("/api/check-vault", { path: p, create });
     const j = await resp.json();
     const icon = !j.ok ? "❌ " : (j.is_vault_root ? "✅ " : "⚠️ ");
     box.textContent = icon + j.message;
     $("createVaultBtn").style.display = (!j.ok && j.can_create) ? "inline-block" : "none";
     if (j.ok) saveVaultConfig();
   } catch (e) {
-    box.textContent = "检查请求失败：" + e;
+    box.textContent = "❌ " + e.message;
   }
 }
 
@@ -441,11 +449,7 @@ async function previewFirst() {
   const old = btn.textContent;
   btn.disabled = true; btn.textContent = "预览提取中…";
   try {
-    const resp = await fetch("/api/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const resp = await postJSON("/api/preview", body);
     const j = await resp.json();
     if (!resp.ok) { showError(j.error || "预览失败"); return; }
     $("errorBox").style.display = "none";
@@ -473,21 +477,24 @@ async function start() {
   $("startBtn").disabled = true;
   $("migrateBtn").disabled = true;
   setBusy("正在提取，全程串行 + 随机间隔…");
-  const resp = await fetch("/api/extract", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ error: "请求失败 " + resp.status }));
-    showError(err.error || "启动失败");
+  try {
+    const resp = await postJSON("/api/extract", body);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: "请求失败 " + resp.status }));
+      showError(err.error || "启动失败");
+      $("startBtn").disabled = false;
+      $("migrateBtn").disabled = false;
+      setBusy("");
+      return;
+    }
+    pollTimer = setInterval(poll, 400);
+    poll();
+  } catch (e) {
+    showError(e.message);
     $("startBtn").disabled = false;
     $("migrateBtn").disabled = false;
     setBusy("");
-    return;
   }
-  pollTimer = setInterval(poll, 400);
-  poll();
 }
 
 // ---- 迁移 ----
@@ -499,11 +506,7 @@ async function scanLegacy() {
   $("scanList").innerHTML = "";
   $("migrateBtn").disabled = true;
   try {
-    const resp = await fetch("/api/migrate-scan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dir }),
-    });
+    const resp = await postJSON("/api/migrate-scan", { dir });
     const j = await resp.json();
     if (!resp.ok) { showMigrateMsg("扫描失败：" + (j.error || resp.status)); return; }
     if (!j.collections.length) {
@@ -541,30 +544,42 @@ async function startMigrate() {
   $("startBtn").disabled = true;
   $("migrateBtn").disabled = true;
   setBusy("正在迁移（不联网）…");
-  const resp = await fetch("/api/migrate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ error: "请求失败 " + resp.status }));
-    showMigrateMsg("迁移启动失败：" + (err.error || resp.status));
+  try {
+    const resp = await postJSON("/api/migrate", body);
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: "请求失败 " + resp.status }));
+      showMigrateMsg("迁移启动失败：" + (err.error || resp.status));
+      $("startBtn").disabled = false;
+      $("migrateBtn").disabled = false;
+      setBusy("");
+      return;
+    }
+    pollTimer = setInterval(poll, 400);
+    poll();
+  } catch (e) {
+    showMigrateMsg(e.message);
     $("startBtn").disabled = false;
     $("migrateBtn").disabled = false;
     setBusy("");
-    return;
   }
-  pollTimer = setInterval(poll, 400);
-  poll();
 }
 
 // ---- 运行状态轮询 ----
+
+let pollFailures = 0;
 
 async function poll() {
   let s;
   try {
     s = await (await fetch("/api/run")).json();
-  } catch (e) { return; }
+    pollFailures = 0;
+  } catch (e) {
+    // 服务失联：多失败几次后给出提示（避免 spinner 永远无声地转）
+    if (++pollFailures === 15) {
+      setBusy("⚠️ 与本地服务失去联系，请检查 server.py 窗口是否被关闭或端口被占用");
+    }
+    return;
+  }
   const box = $("logBox");
   box.innerHTML = s.log
     .map((item) => `<div class="${kindOf(item.line)}">${esc(item.line)}</div>`)

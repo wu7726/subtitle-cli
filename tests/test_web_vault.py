@@ -205,3 +205,33 @@ def test_page_structure_vault_elements(tmp_path: Path):
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+def test_port_conflict_fails_loudly(tmp_path: Path):
+    """Windows 下端口被占时必须显式报错退出（回归：曾因 SO_REUSEADDR 静默
+    双绑定，请求被随机路由到僵死实例 → 页面正常但接口 Failed to fetch）。"""
+    if os.name != "nt":
+        import pytest
+
+        pytest.skip("仅 Windows 存在静默双绑定问题")
+    import socket
+
+    blocker = socket.socket()
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    port = blocker.getsockname()[1]
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(SERVER), "--port", str(port), "--no-open"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            cwd=str(REPO_ROOT),
+        )
+        assert proc.returncode == 1
+        assert "端口" in (proc.stderr + proc.stdout)
+        assert "无法监听" in (proc.stderr + proc.stdout)
+    finally:
+        blocker.close()
