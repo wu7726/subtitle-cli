@@ -90,6 +90,10 @@
 </style>
 </head>
 <body>
+<div id="fileProtoBanner" style="display:none; background:#fee2e2; color:#b91c1c; padding:10px 16px; font-size:13px; line-height:1.8">
+  ⚠️ 你是直接打开的本地文件（file:// 协议）——这样页面能显示，但所有接口都不可用（Failed to fetch）。<br>
+  正确用法：先运行 <b>python web/server.py</b>，再在浏览器打开 <b>http://127.0.0.1:8765</b>。
+</div>
 <header>
   <div class="wrap">
     <h1>B站合集字幕提取器</h1>
@@ -668,6 +672,7 @@ function toggleRaw() {
 
 $("vaultInput").addEventListener("change", saveVaultConfig);
 $("vaultSubdirInput").addEventListener("change", saveVaultConfig);
+if (location.protocol === "file:") $("fileProtoBanner").style.display = "block";
 setMode();
 setOutMode();
 loadConfig();

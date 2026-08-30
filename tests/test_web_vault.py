@@ -194,6 +194,7 @@ def test_page_structure_vault_elements(tmp_path: Path):
             'id="openObsidian"', 'id="outVault"', 'id="outFolder"',
             '写入 Obsidian vault（推荐）', '检查 vault', '创建该文件夹',
             'id="outVault" checked', '在 Obsidian 中打开合集索引',
+            'id="fileProtoBanner"',  # file:// 直接打开时的引导横幅
         ]:
             assert key in html, key
         # 默认态：输出位置区块随演示模式隐藏；迁移卡常显
