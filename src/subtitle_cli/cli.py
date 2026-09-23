@@ -13,6 +13,7 @@ from typing import Optional
 
 import typer
 
+from . import config
 from .asr import AsrDependencyError
 from .bilibili.client import RiskControlError, normalize_cookie
 from .dispatch import BILIBILI, DOUYIN, PODCAST, create_client, detect_platform
@@ -71,12 +72,14 @@ def main(
         False,
         "--asr",
         help="无字幕/无文稿的分集下载音频，用本地语音转写兜底（需先 pip install -e \".[asr]\"；"
-        "首次运行自动下载模型，CPU 转写较慢，重跑会自动跳过已成功分集）",
+        "首次运行自动下载模型；有 NVIDIA 显卡并装好 cuBLAS/cuDNN 时自动用显卡转写；"
+        "重跑会自动跳过已成功分集）",
     ),
     asr_model: str = typer.Option(
-        "small",
+        config.ASR_MODEL_SIZE,
         "--asr-model",
-        help="语音转写模型：tiny/base/small/medium（越大越准越慢，默认 small）",
+        help="语音转写模型：tiny/base/small/medium（越大越准越慢，默认 medium；"
+        "回退到 CPU 时建议改 small）",
     ),
     asr_limit: Optional[int] = typer.Option(
         None,

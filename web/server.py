@@ -41,7 +41,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT))
 
-from subtitle_cli import storage  # noqa: E402
+from subtitle_cli import config, storage  # noqa: E402
 from subtitle_cli.bilibili.client import BilibiliClient, normalize_cookie  # noqa: E402
 from subtitle_cli.bilibili.models import EpisodeStatus  # noqa: E402
 from subtitle_cli.dispatch import BILIBILI, DOUYIN, PODCAST, create_client, detect_platform  # noqa: E402
@@ -186,7 +186,7 @@ def run_extract_job(
     vault_path: str = "",
     vault_subdir: str = "",
     asr: bool = False,
-    asr_model: str = "small",
+    asr_model: str = config.ASR_MODEL_SIZE,
     asr_limit: int | None = None,
 ) -> None:
     try:
@@ -536,9 +536,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "缺少合集链接或 season_id"}, 400)
                 return
             asr = bool(data.get("asr")) and not demo
-            asr_model = str(data.get("asr_model") or "small")
+            asr_model = str(data.get("asr_model") or config.ASR_MODEL_SIZE)
             if asr_model not in ("tiny", "base", "small", "medium"):
-                asr_model = "small"
+                asr_model = config.ASR_MODEL_SIZE
             asr_limit_raw = data.get("asr_limit")
             asr_limit = (
                 int(asr_limit_raw)

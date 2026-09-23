@@ -25,6 +25,80 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
+# ---- CUDA 运行库路径注入（必须在 ctranslate2 被 import 之前完成）----
+#
+# pip 安装的 nvidia-cublas-cu12 / nvidia-cudnn-cu12 把 DLL 放在
+# site-packages/nvidia/<lib>/bin，ctranslate2 自带的 cudnn 放在自己包目录，
+# 两者都不在系统 PATH 上。若不显式注入 DLL 搜索路径，ctranslate2 会在
+# 推理时抛 "Library cublas64_12.dll is not found or cannot be loaded"；
+# 更麻烦的是 ctranslate2.dll 一旦加载，其依赖搜索路径即被固化，
+# 事后再注入也无效（表现为推理阶段直接挂死），因此必须在模块导入期完成。
+
+_CUDA_DLL_SUBDIRS = (
+    "nvidia/cublas/bin",
+    "nvidia/cudnn/bin",
+    "nvidia/cuda_nvrtc/bin",
+    "ctranslate2",
+)
+_CUBLAS_NAMES = ("cublas64_12.dll", "cublas64_11.dll")
+_CUDNN_NAMES = ("cudnn64_9.dll", "cudnn64_8.dll")
+
+# os.add_dll_directory 返回的句柄一旦被 GC，目录会立即移出搜索路径，必须保活。
+_DLL_HANDLES: list[object] = []
+_DLL_DIRS_REGISTERED = False
+
+
+def _cuda_dll_dirs() -> list[Path]:
+    """CUDA 运行库所在目录（按当前解释器的 site-packages 定位，去重）。"""
+    import sysconfig
+
+    dirs: list[Path] = []
+    seen: set[str] = set()
+    for key in ("purelib", "platlib"):
+        base = sysconfig.get_paths().get(key)
+        if not base:
+            continue
+        for sub in _CUDA_DLL_SUBDIRS:
+            candidate = Path(base) / sub
+            if candidate.is_dir() and str(candidate) not in seen:
+                seen.add(str(candidate))
+                dirs.append(candidate)
+    return dirs
+
+
+def _register_cuda_dll_dirs() -> list[Path]:
+    """把 CUDA 运行库目录注入 DLL 搜索路径（仅 Windows，幂等）。"""
+    global _DLL_DIRS_REGISTERED
+    dirs = _cuda_dll_dirs()
+    if os.name == "nt" and not _DLL_DIRS_REGISTERED:
+        for directory in dirs:
+            try:
+                _DLL_HANDLES.append(os.add_dll_directory(str(directory)))
+            except OSError:
+                continue
+        _DLL_DIRS_REGISTERED = True
+    return dirs
+
+
+def _cuda_runtime_usable(dll_dirs: list[Path]) -> bool:
+    """显卡推理所需的运行库（cuBLAS + cuDNN）是否齐备。
+
+    按文件存在性判断，而不是 ctypes.WinDLL(name)：后者走系统 PATH 解析，
+    而 pip 装的这些 DLL 恰恰不在 PATH 上，会把可用的显卡误判成缺失。
+    非 Windows 交由转写时的运行时错误回退。
+    """
+    if os.name != "nt":
+        return True
+
+    def has_any(names: tuple[str, ...]) -> bool:
+        return any((directory / name).is_file() for directory in dll_dirs for name in names)
+
+    return has_any(_CUBLAS_NAMES) and has_any(_CUDNN_NAMES)
+
+
+# 注入结果缓存：模块导入期算一次，后续设备判定直接复用
+_CUDA_DLL_DIRS: list[Path] = _register_cuda_dll_dirs()
+
 INSTALL_HINT = (
     "未安装语音转写依赖。请先执行：pip install -e \".[asr]\""
     "（首次转写会自动下载模型到 " + config.ASR_MODEL_DIR + "）"
@@ -140,56 +214,33 @@ def _download_file_resumable(url: str, target: Path, *, attempts: int = 3) -> No
     raise AsrModelError(f"下载失败（已重试 {attempts} 次）：{url}，{last_error}")
 
 
-def _load_model(model_size: str, *, log: Callable[[str], None] | None = None):
-    """加载（或取缓存）Whisper 模型。device=auto：有 CUDA 用显卡，否则 CPU。"""
-    if model_size in _MODELS:
-        return _MODELS[model_size]
-    try:
-        from faster_whisper import WhisperModel
-    except ImportError as exc:
-        raise AsrDependencyError(INSTALL_HINT) from exc
-    if log:
-        log(f"加载语音转写模型 {model_size}")
-    directory = download_model(model_size, log=log or (lambda line: None))
-    model = _make_model(WhisperModel, directory, log)
-    _MODELS[model_size] = model
-    return model
-
-
-def _dll_loads(name: str) -> bool:
-    try:
-        import ctypes
-
-        ctypes.WinDLL(name)
-        return True
-    except (OSError, AttributeError):
-        return False
-
-
-def _cuda_runtime_usable() -> bool:
-    """显卡推理所需的运行库（cuBLAS + cuDNN）是否真的可用。
-
-    faster-whisper 构建模型时并不加载这些 DLL，到推理时才报错；在 Windows 上
-    预检一次可避免"构建成功、转写失败"。非 Windows 交由转写时错误回退。
-    """
-    if os.name != "nt":
-        return True
-    cublas_ok = any(_dll_loads(f"cublas64_{v}.dll") for v in ("12", "11"))
-    cudnn_ok = any(
-        _dll_loads(name)
-        for name in (
-            "cudnn_ops_infer64_8.dll",
-            "cudnn_ops64_9.dll",
-            "cudnn64_9.dll",
-            "cudnn64_8.dll",
-        )
-    )
-    return cublas_ok and cudnn_ok
-
-
 def _is_cuda_runtime_error(exc: BaseException) -> bool:
     message = str(exc).lower()
     return any(keyword in message for keyword in ("cublas", "cudnn", "cuda"))
+
+
+def _compute_type_for(device: str) -> str:
+    """device → compute_type；显式指定，不依赖 faster-whisper 的默认推断。"""
+    configured = (config.ASR_COMPUTE_TYPE or "auto").strip().lower()
+    if configured and configured != "auto":
+        return configured
+    return "float16" if device == "cuda" else "int8"
+
+
+def _resolve_device(force_cpu: bool, log: Callable[[str], None] | None) -> str:
+    """决定实际使用的设备：显式 cpu、显式 cuda，或 auto 探测。"""
+    if force_cpu:
+        return "cpu"
+    if config.ASR_DEVICE != "auto":
+        return config.ASR_DEVICE
+    if _cuda_runtime_usable(_CUDA_DLL_DIRS):
+        return "cuda"
+    if log:
+        log(
+            "⚠️ 未检测到可用的 CUDA 运行库（cuBLAS/cuDNN），改用 CPU 转写；"
+            "启用显卡加速：pip install nvidia-cublas-cu12 nvidia-cudnn-cu12"
+        )
+    return "cpu"
 
 
 def _load_model(
@@ -198,8 +249,13 @@ def _load_model(
     log: Callable[[str], None] | None = None,
     force_cpu: bool = False,
 ):
-    """加载（或取缓存）Whisper 模型。auto：有可用 CUDA 用显卡，否则 CPU。"""
-    key = f"{model_size}#cpu" if force_cpu else model_size
+    """加载（或取缓存）Whisper 模型。auto：有可用 CUDA 用显卡，否则 CPU。
+
+    按 (模型, 设备, 计算精度) 三元组缓存——加载一次，逐集复用。
+    """
+    device = _resolve_device(force_cpu, log)
+    compute_type = _compute_type_for(device)
+    key = f"{model_size}#{device}#{compute_type}"
     if key in _MODELS:
         return _MODELS[key]
     try:
@@ -207,21 +263,22 @@ def _load_model(
     except ImportError as exc:
         raise AsrDependencyError(INSTALL_HINT) from exc
     if log:
-        log(f"加载语音转写模型 {model_size}")
+        log(f"加载语音转写模型 {model_size}（device={device}, compute_type={compute_type}）")
     directory = download_model(model_size, log=log or (lambda line: None))
-    if force_cpu:
-        model = WhisperModel(str(directory), device="cpu", compute_type="int8")
-    else:
-        model = WhisperModel(str(directory), device=config.ASR_DEVICE)
-        if config.ASR_DEVICE == "auto" and not _cuda_runtime_usable():
-            if log:
-                log(
-                    "⚠️ 检测到显卡但缺少 CUDA 运行库（cuBLAS/cuDNN），改用 CPU 转写；"
-                    "安装 CUDA Toolkit 与 cuDNN 后可自动用显卡提速。"
-                )
-            model = WhisperModel(str(directory), device="cpu", compute_type="int8")
+    model = WhisperModel(str(directory), device=device, compute_type=compute_type)
     _MODELS[key] = model
     return model
+
+
+def _transcribe_kwargs() -> dict[str, object]:
+    """集中转写参数：VAD 过滤静音、束宽、语言、跨段上下文。"""
+    return {
+        "vad_filter": True,
+        "beam_size": config.ASR_BEAM_SIZE,
+        # 空字符串 → None，交给 whisper 自动检测语种
+        "language": config.ASR_LANGUAGE or None,
+        "condition_on_previous_text": config.ASR_CONDITION_ON_PREVIOUS_TEXT,
+    }
 
 
 def transcribe_audio(
@@ -234,12 +291,13 @@ def transcribe_audio(
     """转写音频文件为字幕行。
 
     - VAD 过滤静音段，跳过无人声区间；
-    - 语言自动检测（中文内容即输出中文）；
+    - 语言默认自动检测（中文内容即输出简体中文）；
     - model 参数供测试注入假模型，生产路径走 _load_model 缓存。
     """
     whisper_model = model or _load_model(model_size, log=log)
+    kwargs = _transcribe_kwargs()
     try:
-        segments_iter, info = whisper_model.transcribe(str(audio_path), vad_filter=True)
+        segments_iter, info = whisper_model.transcribe(str(audio_path), **kwargs)
     except RuntimeError as exc:
         # 语言检测在 transcribe() 调用内即时执行，CUDA 缺库会在此暴露：
         # 换 CPU 模型重试一次（仅生产路径，注入的假模型不重试）
@@ -247,7 +305,7 @@ def transcribe_audio(
             if log:
                 log("⚠️ CUDA 运行库不可用，改用 CPU 转写")
             whisper_model = _load_model(model_size, log=log, force_cpu=True)
-            segments_iter, info = whisper_model.transcribe(str(audio_path), vad_filter=True)
+            segments_iter, info = whisper_model.transcribe(str(audio_path), **kwargs)
         else:
             raise
     if log:

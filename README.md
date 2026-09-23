@@ -8,7 +8,7 @@
 
 - 输入灵活：合集页 URL（含 `sid=` / `season_id=`）、**合集内单个视频的链接或 BV 号**（自动识别所属合集）、**多P视频链接**（视频选集 N/M 形态，按分P批量提取）、纯数字 season_id
 - **播客支持**：RSS 地址或 Apple Podcasts 节目链接 → 按发布时间正序编号提取各单集**现成文稿**（RSS 的 `podcast:transcript` 标签，支持 VTT/SRT/JSON/纯文本/HTML），笔记默认落 vault 的 `播客字幕/` 文件夹（可用 `--vault-subdir` 改）；没有文稿的单集归入「无字幕」。**注意**：实测中文播客极少数提供文稿标签（抽样 40 个热门节目为 0），英文播客覆盖较好；小宇宙网页端不公开 RSS，请从 App「复制 RSS 链接」后粘贴
-- **本地语音转写兜底（ASR）**：`--asr` 开启后，无字幕/无文稿的分集自动下载音频（B站音轨 / 播客 enclosure），用 faster-whisper 本地转写出正文——中文播客、无字幕B站视频全覆盖。模型从 ModelScope 下载（国内直连，支持断点续传）；有 NVIDIA 显卡且装了 CUDA/cuDNN 时自动用显卡，否则用 CPU（int8 量化）。纯音乐/无人声的分集会明确报失败而非产出空笔记
+- **本地语音转写兜底（ASR）**：`--asr` 开启后，无字幕/无文稿的分集自动下载音频（B站音轨 / 播客 enclosure），用 faster-whisper 本地转写出正文——中文播客、无字幕B站视频全覆盖。默认 `medium` 模型（约 1.5GB），模型从 ModelScope 下载（国内直连，支持断点续传）；**有 NVIDIA 显卡时自动走 CUDA（float16）**，只需额外装一次 cuBLAS/cuDNN（见「显卡加速」），未装或探测不到则自动回退 CPU（int8 量化）并打印提示。纯音乐/无人声的分集会明确报失败而非产出空笔记
 - **抖音视频（单个）**：粘贴抖音 App「复制链接」得到的分享口令（含 v.douyin.com 短链，自动解析 302）、视频页或图文页链接 → 自动下载媒体并用本地转写出正文（抖音无可直接抓取的字幕，`--asr` 必开）；发布日期写入属性头 `published`，笔记默认落 vault 的 `抖音字幕/<作者>/`；合集/主页批量暂不支持
 - 自动翻页遍历全部分集，长合集（几十上百集）完整提取
 - 逐集获取字幕并选轨：人工 CC（zh-CN）优先，其次 AI 字幕（ai-zh），再退列表第一个
@@ -30,9 +30,18 @@ git clone <本仓库>
 cd 字幕
 pip install -e .            # 基础功能（B站 + 播客现成文稿）
 pip install -e ".[asr]"     # 加装本地语音转写（faster-whisper，约 200MB 依赖）
+
+# 可选：有 NVIDIA 显卡时装上，ASR 会自动改用显卡（约 1.3GB）
+pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
 ```
 
 注意：直接 `pip install faster-whisper` 时，国内网络建议加 `-i https://pypi.tuna.tsinghua.edu.cn/simple`。
+
+### 显卡加速（可选）
+
+两个 nvidia 包把 DLL 装在 `site-packages/nvidia/<lib>/bin`，并不在系统 PATH 上；工具会在加载模型**之前**把这些目录注入 DLL 搜索路径，所以不需要改系统环境变量，也不需要单独装 CUDA Toolkit。判定要求 cuBLAS 与 cuDNN 同时齐备，缺任一个都会回退 CPU 并打印一行说明。
+
+回退到 CPU 时建议改用小模型（`--asr-model small`）：`medium` 在 CPU 上可能慢于音频本身时长。
 
 ## 快速体验（离线 Demo，无需 Cookie）
 
@@ -82,9 +91,9 @@ subtitle-cli "https://podcasts.apple.com/cn/podcast/xxx/id123456" --vault "D:/Ob
 subtitle-cli "https://example.com/feed.xml" --vault "D:/Obsidian/MyVault" --vault-subdir "学习/播客"
 
 # 无字幕时本地语音转写兜底（需先 pip install -e ".[asr]"）
-subtitle-cli <合集URL或season_id> --asr                          # 默认 small 模型，不限转写集数
+subtitle-cli <合集URL或season_id> --asr                          # 默认 medium 模型，不限转写集数
 subtitle-cli <合集URL或season_id> --asr --asr-limit 5            # 本次最多转写 5 集
-subtitle-cli <合集URL或season_id> --asr --asr-model medium       # 更准更慢：tiny/base/small/medium
+subtitle-cli <合集URL或season_id> --asr --asr-model small        # 更快更省：tiny/base/small/medium
 
 # 抖音单个视频：分享口令 / 短链 / 视频页链接均可（配合 --asr 本地转写）
 subtitle-cli "7.42 复制打开抖音 https://v.douyin.com/iAbCdEf/ 看视频" --asr
