@@ -7,7 +7,6 @@ Cookie 属敏感凭据：只经参数或 BILI_COOKIE 环境变量传入，不写
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -19,19 +18,28 @@ from .bilibili.client import RiskControlError, normalize_cookie
 from .dispatch import BILIBILI, DOUYIN, PODCAST, create_client, detect_platform
 from .errors import PlatformError
 from .pipeline import format_preview, has_failure, preview_first_episode, run_collection, summarize
-from .vault import collection_root, load_config, save_config
+from .stdio import force_utf8_stdio
+from .vault import check_vault, collection_root, load_config, save_config
 
 app = typer.Typer(add_completion=False, help="字幕提取器：B站合集与播客 → Obsidian 笔记。")
 
 
-def _force_utf8_stdio() -> None:
-    """Windows 下重定向输出时默认用本地编码，统一改为 UTF-8 防乱码。"""
-    for stream in (sys.stdout, sys.stderr):
-        if stream is not None and hasattr(stream, "reconfigure"):
-            try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
-            except (OSError, ValueError):
-                pass
+def _check_vault_root(vault_path: str) -> None:
+    """vault 根不可用时报错退出（码 2）。
+
+    原行为是直接 mkdir(parents=True) 把路径拼出来——配置里指向一个已经不存在的
+    目录时，工具会静默重建空壳并把笔记写进去，且不报任何错。改成显式失败。
+    """
+    status = check_vault(vault_path)
+    if not status.ok:
+        typer.echo(
+            f"vault 路径不可用：{vault_path}\n{status.message}\n"
+            "请用 --vault 指向已存在的 vault 根目录，或改用 --output 输出到普通文件夹。",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    if not status.is_vault_root:
+        typer.echo(f"提示：{vault_path} 下没有 .obsidian，若它不是 vault 根，笔记会落到错误的位置")
 
 
 @app.command()
@@ -98,7 +106,7 @@ def main(
     ),
 ) -> None:
     """提取B站合集或播客的字幕，保存为 Markdown 文件。"""
-    _force_utf8_stdio()
+    force_utf8_stdio()
     platform = detect_platform(source)
     cookie = cookie or os.environ.get("BILI_COOKIE") or None
     if cookie and platform == BILIBILI:
@@ -112,21 +120,20 @@ def main(
     # 输出模式判定（开发计划 M7 + 播客分目录）：--output 显式给出 → 普通文件夹
     # 优先；否则已配置 vault（参数 > 配置文件，显式传入即写回）→ obsidian 模式；
     # 都没有 → 沿用旧默认（当前目录，普通输出）。播客落 podcast_subdir。
-    if vault or vault_subdir:
-        cfg = load_config()
-        if vault:
-            cfg.vault = vault
-        if vault_subdir:
-            if platform == PODCAST:
-                cfg.podcast_subdir = vault_subdir
-            elif platform == DOUYIN:
-                cfg.douyin_subdir = vault_subdir
-            else:
-                cfg.subdir = vault_subdir
-        save_config(cfg)
     cfg = load_config()
+    if vault:
+        cfg.vault = vault
+    if vault_subdir:
+        if platform == PODCAST:
+            cfg.podcast_subdir = vault_subdir
+        elif platform == DOUYIN:
+            cfg.douyin_subdir = vault_subdir
+        else:
+            cfg.subdir = vault_subdir
+
     if output is None and cfg.vault.strip():
         note_mode = "obsidian"
+        _check_vault_root(cfg.vault)  # 不可用直接退出 2，绝不静默 mkdir 重建死路径
         default_subdir = (
             cfg.podcast_subdir
             if platform == PODCAST
@@ -138,6 +145,10 @@ def main(
     else:
         note_mode = "plain"
         output = output if output is not None else Path(".")
+
+    # 校验通过才写回配置：路径写错的 vault 不该被记住，更不该在下次运行时被重建
+    if vault or vault_subdir:
+        save_config(cfg)
 
     try:
         output.mkdir(parents=True, exist_ok=True)

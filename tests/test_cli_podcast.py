@@ -33,6 +33,7 @@ def fake_podcast(monkeypatch):
 def test_cli_podcast_vault_default_subdir(tmp_path: Path, monkeypatch, fake_podcast):
     monkeypatch.setenv("SUBTITLE_CLI_CONFIG", str(tmp_path / "config.json"))
     vault = tmp_path / "MyVault"
+    vault.mkdir()
 
     result = runner.invoke(app, ["https://example.com/feed.xml", "--vault", str(vault)])
 
@@ -54,6 +55,7 @@ def test_cli_podcast_vault_default_subdir(tmp_path: Path, monkeypatch, fake_podc
 def test_cli_podcast_explicit_subdir_overrides(tmp_path: Path, monkeypatch, fake_podcast):
     monkeypatch.setenv("SUBTITLE_CLI_CONFIG", str(tmp_path / "config.json"))
     vault = tmp_path / "MyVault"
+    vault.mkdir()
 
     result = runner.invoke(
         app,

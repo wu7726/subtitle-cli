@@ -58,6 +58,7 @@ def _patch(monkeypatch, tmp_path: Path) -> Path:
 
 def test_vault_end_to_end(tmp_path: Path, monkeypatch):
     vault_dir = tmp_path / "vault"
+    (vault_dir / ".obsidian").mkdir(parents=True)  # 真实 vault 根：目录必须先存在
     cfg_path = _patch(monkeypatch, tmp_path)
     result = runner.invoke(app, ["123", "--vault", str(vault_dir)])
     assert result.exit_code == 0, result.output
@@ -76,6 +77,7 @@ def test_vault_end_to_end(tmp_path: Path, monkeypatch):
 
 def test_vault_subdir_nesting(tmp_path: Path, monkeypatch):
     vault_dir = tmp_path / "vault"
+    vault_dir.mkdir()
     _patch(monkeypatch, tmp_path)
     result = runner.invoke(
         app, ["123", "--vault", str(vault_dir), "--vault-subdir", "学习/笔记"]
@@ -97,3 +99,29 @@ def test_output_flag_overrides_configured_vault(tmp_path: Path, monkeypatch):
     assert not (vault_dir / "B站字幕").exists()  # --output 显式给出 → 不进 vault
     plain = (out / "测试合集" / "EP01 标题1.md").read_text(encoding="utf-8")
     assert not plain.startswith("---\n")  # 普通模式仍是无属性头的旧格式
+
+
+def test_missing_vault_errors_without_creating_it(tmp_path: Path, monkeypatch):
+    """vault 路径失效：报错退出 2，绝不静默 mkdir 重建（否则笔记写进空壳没人知道）。"""
+    vault_dir = tmp_path / "typo-vault"
+    cfg_path = _patch(monkeypatch, tmp_path)
+
+    result = runner.invoke(app, ["123", "--vault", str(vault_dir)])
+
+    assert result.exit_code == 2
+    assert not vault_dir.exists()
+    assert "--output" in result.output
+    assert not cfg_path.exists()  # 写错的路径不该被记住
+
+
+def test_dead_vault_from_config_errors_not_silently_recreated(tmp_path: Path, monkeypatch):
+    """配置里指向已消失的目录（真实踩过的坑）：下次运行报错，而不是重建空目录。"""
+    dead = tmp_path / "moved-away"
+    cfg_path = _patch(monkeypatch, tmp_path)
+    cfg_path.write_text(json.dumps({"vault": str(dead)}), encoding="utf-8")
+
+    result = runner.invoke(app, ["123"])
+
+    assert result.exit_code == 2
+    assert not dead.exists()
+    assert json.loads(cfg_path.read_text(encoding="utf-8"))["vault"] == str(dead)  # 配置不动

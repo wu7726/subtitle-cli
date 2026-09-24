@@ -140,6 +140,15 @@ def audio_cache_path(episode: Episode, root: Path | None = None) -> Path:
     return audio_cache_root(root) / f"{stem}-{_short_hash(key)}.bin"
 
 
+def _read_state_file(path: Path) -> CollectionState | None:
+    """读一个状态文件；缺失 / 损坏 / 版本不识别返回 None。"""
+    try:
+        parsed = CollectionState.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return None
+    return parsed if parsed.version == STATE_VERSION else None
+
+
 def load_collection(
     season_id: str,
     output_dir: Path | str = "",
@@ -150,15 +159,19 @@ def load_collection(
     缺失/损坏/版本不识别/season_id 对不上一律回退空状态——宁可当没有记录
     （多花一次网络请求），也不拿错误记录去误跳过。
     """
-    path = collection_state_path(season_id, output_dir, root)
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        state = CollectionState.model_validate(data)
-    except (OSError, ValueError):
+    loaded = _read_state_file(collection_state_path(season_id, output_dir, root))
+    if loaded is None or loaded.season_id != season_id:
         return CollectionState(season_id=season_id, output_dir=_display_dir(output_dir))
-    if state.version != STATE_VERSION or state.season_id != season_id:
-        return CollectionState(season_id=season_id, output_dir=_display_dir(output_dir))
-    return state
+    return loaded
+
+
+def iter_collections(root: Path | None = None) -> list[CollectionState]:
+    """状态目录下的全部合集记录，按最近更新倒序（供 subtitle-cli-status）。"""
+    directory = state_root(root)
+    if not directory.is_dir():
+        return []
+    states = (s for s in (_read_state_file(p) for p in directory.glob("*.json")) if s)
+    return sorted(states, key=lambda s: s.updated, reverse=True)
 
 
 def _display_dir(output_dir: Path | str) -> str:

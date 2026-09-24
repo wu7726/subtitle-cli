@@ -6,26 +6,16 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Optional
 
 import typer
 
 from .migration import format_migration_summary, migrate
+from .stdio import force_utf8_stdio
 from .vault import load_config, save_config
 
 app = typer.Typer(add_completion=False, help="把已下载的旧字幕目录迁移为 Obsidian vault 笔记（不联网、不需要 Cookie）。")
-
-
-def _force_utf8_stdio() -> None:
-    """Windows 下重定向输出时默认用本地编码，统一改为 UTF-8 防乱码。"""
-    for stream in (sys.stdout, sys.stderr):
-        if stream is not None and hasattr(stream, "reconfigure"):
-            try:
-                stream.reconfigure(encoding="utf-8", errors="replace")
-            except (OSError, ValueError):
-                pass
 
 
 @app.command()
@@ -61,7 +51,7 @@ def main(
     ),
 ) -> None:
     """扫描旧字幕目录，转换成带属性头的笔记并写入 vault，同时生成索引页。"""
-    _force_utf8_stdio()
+    force_utf8_stdio()
     if vault or vault_subdir:
         cfg = load_config()
         if vault:

@@ -18,6 +18,7 @@ asr = ["faster-whisper>=1.0"]
 [project.scripts]
 subtitle-cli = "subtitle_cli.cli:app"
 subtitle-cli-migrate = "subtitle_cli.migrate:app"
+subtitle-cli-status = "subtitle_cli.status:app"
 
 [build-system]
 requires = ["hatchling"]
