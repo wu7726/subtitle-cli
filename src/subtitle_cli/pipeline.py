@@ -111,6 +111,7 @@ def run_collection(
     asr_model: str = ASR_MODEL_SIZE,
     asr_limit: int | None = None,
     state_root: Path | None = None,
+    recheck: bool = False,
 ) -> RunOutcome:
     """跑完整流程。输入不合法抛 ValueError（CLI 转为退出码 2）。
 
@@ -120,13 +121,16 @@ def run_collection(
     （多平台扩展计划 §3 第 2 步）；依赖未安装时抛 AsrDependencyError。
     state_root：状态文件落点（默认 ~/.subtitle-cli/runs/）；每集结束立即
     落盘，进程中断也不丢已完成的结论。
+    recheck=True：已确认「无字幕」的分集也重新联网查一遍（默认跳过——
+    那是查过的结论，不是没做过）。
     """
     season_id = client.resolve_input(raw_input)
     collection_name, episodes = client.list_episodes(season_id)
     fetched = fetched_at or date.today()
     author = _uploader_of(client, episodes)
-    collection_state = state.load_collection(season_id, state_root)
+    collection_state = state.load_collection(season_id, output_dir, state_root)
     collection_state.collection_name = collection_name
+    collection_state.output_dir = str(Path(output_dir).resolve())
     log(f"合集《{collection_name}》共 {len(episodes)} 集，输出目录：{output_dir}")
     _check_login(client, log)
 
@@ -158,6 +162,17 @@ def run_collection(
         label = f"EP{episode.index:02d}"
         path = storage.output_path(output_dir, collection_name, episode.index, episode.title)
 
+        recorded = state.status_of(collection_state, episode)
+        if recorded in (EpisodeStatus.SUCCESS, EpisodeStatus.SKIPPED):
+            # 状态是权威：产物可能已被搬走（比如你把它整理进了 daily/nothing），
+            # 不该因为落点空了就重新下载一遍
+            results.append(EpisodeResult(episode=episode, status=EpisodeStatus.SKIPPED))
+            log(f"{label} 已处理过，跳过")
+            continue
+        if recorded == EpisodeStatus.NO_SUBTITLE and not recheck:
+            results.append(EpisodeResult(episode=episode, status=EpisodeStatus.NO_SUBTITLE))
+            log(f"{label} 上次已确认无字幕，跳过（要重查加 --recheck）")
+            continue
         if storage.is_downloaded(path):
             _finish(episode, EpisodeStatus.SKIPPED)
             log(f"{label} 已存在，跳过")

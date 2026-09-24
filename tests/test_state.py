@@ -55,7 +55,7 @@ def test_key_is_positional_only_for_podcast_fallback():
 
 
 def test_state_path_sanitizes_feed_url(tmp_path):
-    path = collection_state_path("https://example.com/feed.xml?a=1&b=2", tmp_path)
+    path = collection_state_path("https://example.com/feed.xml?a=1&b=2", root=tmp_path)
     assert path.parent == tmp_path
     assert path.suffix == ".json"
     for illegal in '<>:"/\\|?*#[]^':
@@ -63,30 +63,61 @@ def test_state_path_sanitizes_feed_url(tmp_path):
 
 
 def test_state_path_empty_season_id(tmp_path):
-    path = collection_state_path("   ", tmp_path)
+    path = collection_state_path("   ", root=tmp_path)
     assert path.name == "_.json"
 
 
-# ---- 读写 ----
+# ---- 落点指纹：同一合集在不同输出目录各自独立 ----
+
+
+def test_state_path_differs_by_output_dir(tmp_path):
+    a = collection_state_path("123", tmp_path / "A", tmp_path)
+    b = collection_state_path("123", tmp_path / "B", tmp_path)
+    assert a != b
+    assert a.name.startswith("123-") and b.name.startswith("123-")
+
+
+def test_state_path_same_dir_same_fingerprint(tmp_path):
+    """同一落点的不同写法（大小写、多余分隔符）必须指向同一个状态文件。"""
+    target = tmp_path / "Vault"
+    target.mkdir()
+    a = collection_state_path("123", target, tmp_path)
+    b = collection_state_path("123", str(target).upper(), tmp_path)
+    c = collection_state_path("123", Path(str(target) + "/"), tmp_path)
+    assert a == b == c
+
+
+def test_load_ignores_other_target_state(tmp_path):
+    """换个落点再跑：读不到旧落点的记录（否则新目录会永远是空的）。"""
+    state = CollectionState(season_id="123", output_dir=str(tmp_path / "A"))
+    record_episode(state, _episode(bvid="BV1", index=1), EpisodeStatus.SUCCESS)
+    save_collection(state, tmp_path)
+
+    assert load_collection("123", tmp_path / "A", tmp_path).episodes  # 同落点读得到
+    assert load_collection("123", tmp_path / "B", tmp_path).episodes == {}
 
 
 def test_load_missing_returns_empty_state(tmp_path):
-    state = load_collection("123", tmp_path)
+    state = load_collection("123", tmp_path, tmp_path)
     assert state.season_id == "123"
     assert state.episodes == {}
     assert state.version == STATE_VERSION
+    assert state.output_dir  # 记下落点，便于 status 展示
 
 
 def test_record_and_roundtrip(tmp_path):
-    state = CollectionState(season_id="123", collection_name="数字信号处理")
+    state = CollectionState(
+        season_id="123", output_dir=str(tmp_path), collection_name="数字信号处理"
+    )
     record_episode(state, _episode(bvid="BV1", index=1), EpisodeStatus.SUCCESS)
     record_episode(
         state, _episode(bvid="BV2", index=2), EpisodeStatus.FAILED, reason="风控"
     )
     save_collection(state, tmp_path)
 
-    loaded = load_collection("123", tmp_path)
+    loaded = load_collection("123", tmp_path, tmp_path)
     assert loaded.collection_name == "数字信号处理"
+    assert loaded.output_dir == str(tmp_path)
     assert loaded.episodes["BV1"].status == EpisodeStatus.SUCCESS
     assert loaded.episodes["BV2"].status == EpisodeStatus.FAILED
     assert loaded.episodes["BV2"].reason == "风控"
@@ -112,27 +143,27 @@ def test_save_leaves_no_tmp_behind(tmp_path):
 
 
 def test_load_corrupt_json_returns_empty(tmp_path):
-    path = collection_state_path("123", tmp_path)
+    path = collection_state_path("123", tmp_path, tmp_path)
     path.write_text("{not json", encoding="utf-8")
-    state = load_collection("123", tmp_path)
+    state = load_collection("123", tmp_path, tmp_path)
     assert state.episodes == {}
 
 
 def test_load_season_id_mismatch_returns_empty(tmp_path):
     # 截断碰撞防御：文件里的 season_id 对不上就当没有记录
-    path = collection_state_path("123", tmp_path)
+    path = collection_state_path("123", tmp_path, tmp_path)
     path.write_text(
         json.dumps({"version": STATE_VERSION, "season_id": "other"}), encoding="utf-8"
     )
-    assert load_collection("123", tmp_path).episodes == {}
+    assert load_collection("123", tmp_path, tmp_path).episodes == {}
 
 
 def test_load_unknown_version_returns_empty(tmp_path):
-    path = collection_state_path("123", tmp_path)
+    path = collection_state_path("123", tmp_path, tmp_path)
     path.write_text(
         json.dumps({"version": 999, "season_id": "123"}), encoding="utf-8"
     )
-    assert load_collection("123", tmp_path).episodes == {}
+    assert load_collection("123", tmp_path, tmp_path).episodes == {}
 
 
 # ---- 查询 ----

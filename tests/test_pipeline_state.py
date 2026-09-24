@@ -20,7 +20,8 @@ def _state_root(tmp_path: Path) -> Path:
 
 
 def _load(tmp_path: Path):
-    return state.load_collection("100", _state_root(tmp_path))
+    # run_collection 的落点就是 tmp_path，状态文件按「合集 + 落点」分开存
+    return state.load_collection("100", tmp_path, _state_root(tmp_path))
 
 
 def test_records_success_and_failure(tmp_path: Path):
@@ -81,7 +82,7 @@ def test_state_accumulates_across_runs(tmp_path: Path):
     second = FakeClient(episodes=make_episodes(2), script={1: track_of("一。"), 2: track_of("二。")})
     run_collection("100", tmp_path, second, state_root=root)
 
-    loaded = state.load_collection("100", root)
+    loaded = state.load_collection("100", tmp_path, root)
     assert set(loaded.episodes) == {"cid1", "cid2"}
     assert loaded.episodes["cid2"].status == EpisodeStatus.SUCCESS
 

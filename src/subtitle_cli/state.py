@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
@@ -47,6 +48,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _normalize_target(output_dir: Path | str) -> str:
+    """落点归一化：绝对化 + 大小写折叠 + 统一斜杠，供指纹与展示使用。"""
+    return str(Path(output_dir).resolve()).casefold().replace("\\", "/")
+
+
+def target_fingerprint(output_dir: Path | str) -> str:
+    """落点指纹（8 位哈希）。
+
+    同一个合集换个输出目录再跑，是要在新地方重新出一份——不能因为
+    "这个合集做过"就跳过，否则新目录永远是空的。所以状态文件按
+    「合集 + 落点」分开存。
+    """
+    normalized = _normalize_target(output_dir)
+    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:8]
+
+
 class EpisodeState(BaseModel):
     """一集的结论记录。title/bvid 只是快照，供 status 展示与人工核对。"""
 
@@ -61,10 +78,11 @@ class EpisodeState(BaseModel):
 
 
 class CollectionState(BaseModel):
-    """一个合集的状态文件内容（按集键索引）。"""
+    """一个合集在**某个落点**的状态文件内容（按集键索引）。"""
 
     version: int = STATE_VERSION
     season_id: str
+    output_dir: str = ""  # 本次落点（绝对路径，供 status 展示与人工核对）
     collection_name: str = ""  # 最近一次见到的合集名，便于 status 展示
     updated: str = ""
     episodes: dict[str, EpisodeState] = Field(default_factory=dict)
@@ -80,39 +98,52 @@ def state_root(path: Path | None = None) -> Path:
     return Path.home() / ".subtitle-cli" / "runs"
 
 
-def collection_state_path(season_id: str, root: Path | None = None) -> Path:
-    """某合集的状态文件路径：<root>/<season_id 清洗截断>.json。
+def collection_state_path(
+    season_id: str,
+    output_dir: Path | str = "",
+    root: Path | None = None,
+) -> Path:
+    """某合集在**某落点**的状态文件路径：<root>/<season 清洗>-<落点指纹>.json。
 
     season_id 来自各平台 resolve_input（数字 sid / BV 号 / feed 地址）；
-    feed 地址含 URL 特殊字符，统一走文件名清洗并截断至 60 字符。
-    完整 season_id 存在文件内容里，load 时核对以防截断碰撞。
+    feed 地址含 URL 特殊字符，统一走文件名清洗。完整 season_id 与落点存在
+    文件内容里，load 时核对以防截断碰撞。
     """
-    stem = sanitize_filename(season_id)[:60]
-    if not stem:
-        stem = "_"
+    stem = sanitize_filename(season_id)[:40] or "_"
+    if output_dir and str(output_dir).strip():
+        stem = f"{stem}-{target_fingerprint(output_dir)}"
     return state_root(root) / f"{stem}.json"
 
 
-def load_collection(season_id: str, root: Path | None = None) -> CollectionState:
-    """读取合集状态；缺失/损坏/版本不识别/season_id 对不上一律回退空状态。
+def load_collection(
+    season_id: str,
+    output_dir: Path | str = "",
+    root: Path | None = None,
+) -> CollectionState:
+    """读取合集在指定落点的状态。
 
-    宁可当没有记录（多花一次网络请求），也不拿错误记录去误跳过。
+    缺失/损坏/版本不识别/season_id 对不上一律回退空状态——宁可当没有记录
+    （多花一次网络请求），也不拿错误记录去误跳过。
     """
-    path = collection_state_path(season_id, root)
+    path = collection_state_path(season_id, output_dir, root)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         state = CollectionState.model_validate(data)
     except (OSError, ValueError):
-        return CollectionState(season_id=season_id)
+        return CollectionState(season_id=season_id, output_dir=_display_dir(output_dir))
     if state.version != STATE_VERSION or state.season_id != season_id:
-        return CollectionState(season_id=season_id)
+        return CollectionState(season_id=season_id, output_dir=_display_dir(output_dir))
     return state
+
+
+def _display_dir(output_dir: Path | str) -> str:
+    return str(Path(output_dir).resolve()) if str(output_dir).strip() else ""
 
 
 def save_collection(state: CollectionState, root: Path | None = None) -> Path:
     """原子写入状态文件（临时文件 + replace），返回落点路径。"""
     state.updated = _now()
-    target = collection_state_path(state.season_id, root)
+    target = collection_state_path(state.season_id, state.output_dir, root)
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(".json.tmp")
     tmp.write_text(state.model_dump_json(indent=2), encoding="utf-8")

@@ -86,6 +86,11 @@ def main(
         "--asr-limit",
         help="本次最多转写多少集（默认不限；无字幕分集很多时建议限制）",
     ),
+    recheck: bool = typer.Option(
+        False,
+        "--recheck",
+        help="重跑时也重新联网检查上次确认「无字幕」的分集（默认跳过；UP主后补字幕时用）",
+    ),
 ) -> None:
     """提取B站合集或播客的字幕，保存为 Markdown 文件。"""
     _force_utf8_stdio()
@@ -145,7 +150,7 @@ def main(
                 raise typer.Exit(code=0)
             outcome = run_collection(
                 source, output, client, log=typer.echo, note_mode=note_mode,
-                asr=asr, asr_model=asr_model, asr_limit=asr_limit,
+                asr=asr, asr_model=asr_model, asr_limit=asr_limit, recheck=recheck,
             )
     except ValueError as exc:
         typer.echo(f"输入无效：{exc}", err=True)
