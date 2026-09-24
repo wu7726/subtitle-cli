@@ -91,6 +91,11 @@ def main(
         "--recheck",
         help="重跑时也重新联网检查上次确认「无字幕」的分集（默认跳过；UP主后补字幕时用）",
     ),
+    no_audio_cache: bool = typer.Option(
+        False,
+        "--no-audio-cache",
+        help="转写不复用音频缓存，每次都重新下载（默认：转写成功即删、失败的留着供重跑直接转写）",
+    ),
 ) -> None:
     """提取B站合集或播客的字幕，保存为 Markdown 文件。"""
     _force_utf8_stdio()
@@ -151,6 +156,7 @@ def main(
             outcome = run_collection(
                 source, output, client, log=typer.echo, note_mode=note_mode,
                 asr=asr, asr_model=asr_model, asr_limit=asr_limit, recheck=recheck,
+                audio_cache=not no_audio_cache,
             )
     except ValueError as exc:
         typer.echo(f"输入无效：{exc}", err=True)

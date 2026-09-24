@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from subtitle_cli import asr as asr_mod
+from subtitle_cli import state
 from subtitle_cli.asr import AsrDependencyError
 from subtitle_cli.bilibili.models import Episode, EpisodeStatus, SubtitleLine, SubtitleTrack
 from subtitle_cli.errors import PlatformError
@@ -20,7 +21,12 @@ class FakeAsrClient(FakeClient):
 
     download_error: Exception | None = None
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.downloads: list[str] = []  # 每次真实下载记一个集键，用于验证缓存命中
+
     def download_audio(self, episode: Episode, dest: Path) -> Path:
+        self.downloads.append(episode.bvid)
         if self.download_error is not None:
             raise self.download_error
         dest.write_bytes(b"fake-audio-bytes")
@@ -59,7 +65,7 @@ def test_no_subtitle_episode_falls_back_to_asr(tmp_path, fake_transcribe):
     assert statuses[2] == EpisodeStatus.SUCCESS
     assert outcome.asr_count == 1
     note = (tmp_path / "测试合集" / "EP01 标题1.md").read_text(encoding="utf-8")
-    assert "转写自 audio-1.bin。" in note
+    assert f"转写自 {state.audio_cache_path(_episodes(1)[0]).name}。" in note
     assert "本地转写 1" in summarize(outcome)
 
 
@@ -124,3 +130,60 @@ def test_transcription_empty_result_marks_failed(tmp_path, monkeypatch):
 
     assert outcome.results[0].status == EpisodeStatus.FAILED
     assert "转写结果为空" in (outcome.results[0].reason or "")
+
+
+# ---- 音频缓存 ----
+def test_audio_cache_kept_on_failure_and_reused_on_rerun(tmp_path, monkeypatch):
+    """转写失败的音频留在缓存里：重跑直接复用，不再下载一遍。"""
+    monkeypatch.setattr(asr_mod, "ensure_dependency", lambda: None)
+    monkeypatch.setattr(asr_mod, "transcribe_audio", lambda *a, **k: [])  # 空结果＝失败
+
+    episodes = _episodes(1)
+    first = FakeAsrClient(episodes=episodes, script={1: None})
+    assert run_collection("100", tmp_path, first, asr=True).results[0].status == (
+        EpisodeStatus.FAILED
+    )
+    cached = state.audio_cache_path(episodes[0])
+    assert cached.is_file()  # 失败 → 留下
+
+    monkeypatch.setattr(
+        asr_mod,
+        "transcribe_audio",
+        lambda *a, **k: [SubtitleLine(from_time=0.0, to_time=1.0, content="转写结果。")],
+    )
+    logs: list[str] = []
+    second = FakeAsrClient(episodes=episodes, script={1: None})
+    outcome = run_collection("100", tmp_path, second, asr=True, log=logs.append)
+
+    assert second.downloads == []  # 关键：没有重新下载
+    assert any("命中缓存" in line for line in logs)
+    assert outcome.results[0].status == EpisodeStatus.SUCCESS
+    assert not cached.exists()  # 成功即删
+
+
+def test_audio_cache_deleted_on_success(tmp_path, fake_transcribe):
+    episodes = _episodes(1)
+    client = FakeAsrClient(episodes=episodes, script={1: None})
+
+    run_collection("100", tmp_path, client, asr=True)
+
+    assert client.downloads == ["BV01"]
+    assert list(state.audio_cache_root().glob("*.bin")) == []
+
+
+def test_no_audio_cache_ignores_existing_file_and_leaves_nothing(tmp_path, monkeypatch):
+    """--no-audio-cache：不命中已有缓存、每次都重下，失败也不留文件。"""
+    monkeypatch.setattr(asr_mod, "ensure_dependency", lambda: None)
+    monkeypatch.setattr(asr_mod, "transcribe_audio", lambda *a, **k: [])
+
+    episodes = _episodes(1)
+    cached = state.audio_cache_path(episodes[0])
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    cached.write_bytes(b"stale-audio")
+
+    client = FakeAsrClient(episodes=episodes, script={1: None})
+    outcome = run_collection("100", tmp_path, client, asr=True, audio_cache=False)
+
+    assert client.downloads == ["BV01"]  # 无视缓存，仍然下载
+    assert outcome.results[0].status == EpisodeStatus.FAILED
+    assert not cached.exists()  # 失败也不留

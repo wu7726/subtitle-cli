@@ -39,6 +39,8 @@ ASR_MODEL_SIZE = "medium"  # 默认模型：medium（约 1.5GB）。GPU 下速�
 ASR_DEVICE = "auto"  # auto：有 NVIDIA 显卡用 CUDA，否则 CPU
 ASR_COMPUTE_TYPE = "auto"  # auto：CUDA→float16，CPU→int8
 ASR_BEAM_SIZE = 5  # 束搜索宽度；GPU 上 5 是速度与准确率的平衡点，CPU 可降为 1
+# 音频缓存占用超过该值时提示可整目录清理（不做 LRU：成功即删，留下的只有失败集）
+AUDIO_CACHE_HINT_BYTES = 1024**3
 ASR_LANGUAGE = ""  # 转写语言：留空自动检测；已知中文素材可填 "zh" 省一次检测
 # 关闭跨段上下文：长音频（课程/播客）逐段累积上下文会诱发复读幻觉且越跑越慢
 ASR_CONDITION_ON_PREVIOUS_TEXT = False

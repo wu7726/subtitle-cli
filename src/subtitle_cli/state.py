@@ -53,6 +53,10 @@ def _normalize_target(output_dir: Path | str) -> str:
     return str(Path(output_dir).resolve()).casefold().replace("\\", "/")
 
 
+def _short_hash(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
+
+
 def target_fingerprint(output_dir: Path | str) -> str:
     """落点指纹（8 位哈希）。
 
@@ -60,8 +64,7 @@ def target_fingerprint(output_dir: Path | str) -> str:
     "这个合集做过"就跳过，否则新目录永远是空的。所以状态文件按
     「合集 + 落点」分开存。
     """
-    normalized = _normalize_target(output_dir)
-    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:8]
+    return _short_hash(_normalize_target(output_dir))
 
 
 class EpisodeState(BaseModel):
@@ -113,6 +116,28 @@ def collection_state_path(
     if output_dir and str(output_dir).strip():
         stem = f"{stem}-{target_fingerprint(output_dir)}"
     return state_root(root) / f"{stem}.json"
+
+
+def audio_cache_root(path: Path | None = None) -> Path:
+    """音频缓存目录；SUBTITLE_CLI_AUDIO_CACHE_DIR 可覆盖（测试/多实例用）。"""
+    if path is not None:
+        return path
+    override = os.environ.get("SUBTITLE_CLI_AUDIO_CACHE_DIR")
+    if override:
+        return Path(override)
+    return Path.home() / ".subtitle-cli" / "cache"
+
+
+def audio_cache_path(episode: Episode, root: Path | None = None) -> Path:
+    """某集的音频缓存文件：<root>/<集键清洗-短哈希>.bin。
+
+    键可能很长（播客 guid 是 URL），故清洗后截断并补哈希防碰撞。
+    后缀无所谓：PyAV 按内容探测容器（与原先的 audio-N.bin 一致）。
+    只有**转写失败**的集才会留在这里，重跑直接复用，不必重新下载。
+    """
+    key = episode_key(episode)
+    stem = sanitize_filename(key)[:40] or "_"
+    return audio_cache_root(root) / f"{stem}-{_short_hash(key)}.bin"
 
 
 def load_collection(

@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Callable, Literal, Protocol
@@ -16,7 +15,7 @@ from . import notes, state, storage
 from . import asr as asr_module  # 别名：run_collection 的 asr 参数会遮蔽模块名
 from .bilibili.client import BilibiliError, RiskControlError
 from .bilibili.models import Episode, EpisodeResult, EpisodeStatus, SubtitleTrack
-from .config import RISK_ABORT_THRESHOLD, ASR_MODEL_SIZE
+from .config import ASR_MODEL_SIZE, AUDIO_CACHE_HINT_BYTES, RISK_ABORT_THRESHOLD
 from .converter import subtitle_to_markdown
 from .errors import PlatformError
 from .reviewer import AuditReport, CleaningStats, audit_markdown, clean_lines, format_report
@@ -112,6 +111,7 @@ def run_collection(
     asr_limit: int | None = None,
     state_root: Path | None = None,
     recheck: bool = False,
+    audio_cache: bool = True,
 ) -> RunOutcome:
     """跑完整流程。输入不合法抛 ValueError（CLI 转为退出码 2）。
 
@@ -123,6 +123,7 @@ def run_collection(
     落盘，进程中断也不丢已完成的结论。
     recheck=True：已确认「无字幕」的分集也重新联网查一遍（默认跳过——
     那是查过的结论，不是没做过）。
+    audio_cache=False：转写不走音频缓存，每次都重新下载。
     """
     season_id = client.resolve_input(raw_input)
     collection_name, episodes = client.list_episodes(season_id)
@@ -139,6 +140,8 @@ def run_collection(
         if getattr(client, "download_audio", None) is None:
             log("⚠️ 当前平台不支持音频下载，转写兜底不生效，无字幕的分集将保持无字幕")
             asr = False
+        elif audio_cache:
+            _log_audio_cache(log)
     elif getattr(client, "platform", "") == "douyin":
         log("提示：抖音没有可直接抓取的字幕，加 --asr 开启本地语音转写才能出正文。")
 
@@ -211,7 +214,7 @@ def run_collection(
                 log(f"{label} 无字幕（已达本次转写上限 {asr_limit} 集，未转写）")
                 continue
             try:
-                track = _asr_fallback(client, episode, asr_model, log)
+                track = _asr_fallback(client, episode, asr_model, log, cache=audio_cache)
                 asr_count += 1
             except PlatformError as exc:
                 _finish(episode, EpisodeStatus.FAILED, str(exc))
@@ -281,25 +284,48 @@ def _asr_fallback(
     episode: Episode,
     asr_model: str,
     log: Callable[[str], None],
+    *,
+    cache: bool = True,
 ) -> SubtitleTrack:
-    """无字幕分集的语音转写兜底：下载音频到临时目录 → faster-whisper → 字幕行。
+    """无字幕分集的语音转写兜底：取音频（缓存优先）→ faster-whisper → 字幕行。
 
-    音频临时文件随 with 块删除；任何环节失败抛 PlatformError（该集计 FAILED），
-    不中断整体流程。
+    音频落 ~/.subtitle-cli/cache/：**转写成功即删**，所以留下的只有失败的集，
+    重跑直接从缓存转写、不再下载（cache=False 则每次都重新下载）。
+    任何环节失败抛 PlatformError（该集计 FAILED），不中断整体流程。
     """
     label = f"EP{episode.index:02d}"
     log(f"{label} 无字幕，转本地语音转写（模型 {asr_model}，可能较慢）…")
     download = getattr(client, "download_audio")
-    with tempfile.TemporaryDirectory(prefix="subtitle-cli-asr-") as tmp:
-        audio_path = Path(tmp) / f"audio-{episode.index}.bin"
+    audio_path = state.audio_cache_path(episode)
+    if cache and storage.is_downloaded(audio_path):
+        log(f"{label} 音频命中缓存（{audio_path.stat().st_size // 1024} KB），跳过下载")
+    else:
+        audio_path.parent.mkdir(parents=True, exist_ok=True)
         download(episode, audio_path)
-        size_kb = audio_path.stat().st_size // 1024
-        log(f"{label} 音频已下载（{size_kb} KB），开始转写")
+        log(f"{label} 音频已下载（{audio_path.stat().st_size // 1024} KB），开始转写")
+    try:
         lines = asr_module.transcribe_audio(audio_path, model_size=asr_model, log=log)
-    if not lines:
-        raise PlatformError(f"语音转写结果为空（可能无人声或纯音乐）：{episode.title}")
+        if not lines:
+            raise PlatformError(f"语音转写结果为空（可能无人声或纯音乐）：{episode.title}")
+    except Exception:
+        if not cache:
+            audio_path.unlink(missing_ok=True)
+        raise  # 缓存开着就留着音频：重跑不用重新下载
+    audio_path.unlink(missing_ok=True)
     log(f"{label} 转写完成：{len(lines)} 段")
     return SubtitleTrack(lan="asr", lines=lines)
+
+
+def _log_audio_cache(log: Callable[[str], None]) -> None:
+    """转写前报一次缓存落点与占用：失败的音频留在这里，可随时整目录删。"""
+    directory = state.audio_cache_root()
+    try:
+        total = sum(p.stat().st_size for p in directory.glob("*.bin"))
+    except OSError:
+        total = 0
+    log(f"音频缓存：{directory}（当前 {total / 1048576:.1f} MB；转写成功即删，失败的留着供重跑）")
+    if total > AUDIO_CACHE_HINT_BYTES:
+        log(f"提示：缓存已超 {AUDIO_CACHE_HINT_BYTES / 1073741824:.0f} GB，可直接删除该目录清理")
 
 
 def _uploader_of(client: PlatformClient, episodes: list[Episode]) -> str:
