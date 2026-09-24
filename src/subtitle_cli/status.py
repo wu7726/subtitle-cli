@@ -46,7 +46,7 @@ def render(record: state.CollectionState, only_failed: bool = False) -> str | No
         if e.reason:
             line += f"  — {e.reason}"
         if e.key_positional:
-            line += "  ［这条记录的键不可靠：播客源没有稳定单集 ID］"
+            line += "  ［键不可靠：播客源没有稳定单集 ID，下次运行会重新处理这一集］"
         lines.append(line)
     lines.append("—— " + "、".join(_counts(record.episodes.values())))
     return "\n".join(lines)

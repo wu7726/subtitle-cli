@@ -12,7 +12,7 @@ from pathlib import Path
 
 from subtitle_cli import state
 from subtitle_cli.bilibili.client import BilibiliError, RiskControlError
-from subtitle_cli.bilibili.models import EpisodeStatus
+from subtitle_cli.bilibili.models import Episode, EpisodeStatus
 from subtitle_cli.config import RISK_ABORT_THRESHOLD
 from subtitle_cli.pipeline import run_collection, summarize
 
@@ -154,6 +154,32 @@ def test_resume_after_risk_abort(tmp_path: Path):
     assert outcome.results[0].status == EpisodeStatus.SKIPPED
     assert all(r.status == EpisodeStatus.SUCCESS for r in outcome.results[1:])
     assert outcome.unprocessed == 0
+
+
+def test_positional_key_episodes_are_never_skipped(tmp_path: Path):
+    """播客 feed 没有稳定单集 ID 时键退化成位置序号 —— 这种键不参与跳过判断。
+
+    feed 增删一集，序号就整体错位，错信记录会把**另一集**的结论当成本集的，
+    静默漏掉一集。宁可重新联网。
+    """
+    def positional_episodes() -> list[Episode]:
+        return [Episode(bvid=f"podcast-{i}", title=f"标题{i}", index=i) for i in (1, 2)]
+
+    first = FakeClient(episodes=positional_episodes(), script={1: track_of("一。"), 2: track_of("二。")})
+    _run(tmp_path, first)
+    # 结论确实记下来了（status 会显示，并标注键不可靠）
+    recorded = state.load_collection("100", tmp_path, _state_root(tmp_path))
+    assert recorded.episodes["podcast-1"].status == EpisodeStatus.SUCCESS
+    assert recorded.episodes["podcast-1"].key_positional is True
+
+    for product in (tmp_path / "测试合集").glob("*.md"):
+        product.unlink()  # 产物被搬走，只剩状态记录
+
+    second = FakeClient(episodes=positional_episodes(), script={1: track_of("一。"), 2: track_of("二。")})
+    outcome = _run(tmp_path, second)
+
+    assert [e.index for e in second.fetched] == [1, 2]  # 不可靠的键 → 重新联网
+    assert all(r.status == EpisodeStatus.SUCCESS for r in outcome.results)
 
 
 def test_recheck_does_not_touch_successful_episodes(tmp_path: Path):

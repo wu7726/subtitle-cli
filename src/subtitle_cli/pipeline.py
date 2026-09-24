@@ -165,7 +165,13 @@ def run_collection(
         label = f"EP{episode.index:02d}"
         path = storage.output_path(output_dir, collection_name, episode.index, episode.title)
 
-        recorded = state.status_of(collection_state, episode)
+        # 位置序号兜底的键（播客 feed 没有稳定单集 ID 时）不参与跳过判断：feed
+        # 增删一集，序号就会整体错位，错信它会把**另一集**的结论当成这集的，
+        # 静默漏掉一集。宁可重新联网，也不拿不可靠的键当依据。
+        recorded = (
+            None if state.key_is_positional(episode)
+            else state.status_of(collection_state, episode)
+        )
         if recorded in (EpisodeStatus.SUCCESS, EpisodeStatus.SKIPPED):
             # 状态是权威：产物可能已被搬走（比如你把它整理进了 daily/nothing），
             # 不该因为落点空了就重新下载一遍
@@ -177,6 +183,8 @@ def run_collection(
             log(f"{label} 上次已确认无字幕，跳过（要重查加 --recheck）")
             continue
         if storage.is_downloaded(path):
+            # 状态表出现之前产出的笔记没有记录，只能靠产物文件兜底。别删这条：
+            # 删了那批历史笔记会被当成没做过，全部重下一遍。
             _finish(episode, EpisodeStatus.SKIPPED)
             log(f"{label} 已存在，跳过")
             continue
@@ -301,7 +309,16 @@ def _asr_fallback(
         log(f"{label} 音频命中缓存（{audio_path.stat().st_size // 1024} KB），跳过下载")
     else:
         audio_path.parent.mkdir(parents=True, exist_ok=True)
-        download(episode, audio_path)
+        # 先写 .part 再整体换名：三个平台都是流式写盘，中途 Ctrl-C 会在目标路径
+        # 留下半截文件。而缓存命中只判「存在且非空」——半截文件会被当成有效缓存
+        # 永远不再重下，转写必然失败且只能手工删文件才能恢复。
+        staging = audio_path.with_suffix(".bin.part")
+        try:
+            download(episode, staging)
+        except BaseException:
+            staging.unlink(missing_ok=True)  # Ctrl-C 也算在内，别留半截
+            raise
+        staging.replace(audio_path)
         log(f"{label} 音频已下载（{audio_path.stat().st_size // 1024} KB），开始转写")
     try:
         lines = asr_module.transcribe_audio(audio_path, model_size=asr_model, log=log)

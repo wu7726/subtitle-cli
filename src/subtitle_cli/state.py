@@ -48,35 +48,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _normalize_target(output_dir: Path | str) -> str:
-    """落点归一化：绝对化 + 大小写折叠 + 统一斜杠，供指纹与展示使用。"""
-    return str(Path(output_dir).resolve()).casefold().replace("\\", "/")
-
-
 def _short_hash(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
 
 
-def target_fingerprint(output_dir: Path | str) -> str:
-    """落点指纹（8 位哈希）。
-
-    同一个合集换个输出目录再跑，是要在新地方重新出一份——不能因为
-    "这个合集做过"就跳过，否则新目录永远是空的。所以状态文件按
-    「合集 + 落点」分开存。
-    """
-    return _short_hash(_normalize_target(output_dir))
-
-
 class EpisodeState(BaseModel):
-    """一集的结论记录。title/bvid 只是快照，供 status 展示与人工核对。"""
+    """一集的结论记录（键就是 episodes 字典的键，不重复存一份）。"""
 
-    key: str
     index: int
-    bvid: str
     title: str
     status: EpisodeStatus
     reason: str | None = None
-    key_positional: bool = False  # 键为位置序号兜底时为 True，提示不可靠
+    key_positional: bool = False  # 键为位置序号兜底时为 True，不可靠、不参与跳过
     updated: str = ""
 
 
@@ -108,13 +91,16 @@ def collection_state_path(
 ) -> Path:
     """某合集在**某落点**的状态文件路径：<root>/<season 清洗>-<落点指纹>.json。
 
-    season_id 来自各平台 resolve_input（数字 sid / BV 号 / feed 地址）；
-    feed 地址含 URL 特殊字符，统一走文件名清洗。完整 season_id 与落点存在
-    文件内容里，load 时核对以防截断碰撞。
+    落点也进文件名：同一合集换个输出目录再跑，是要在新地方重新出一份，不能因为
+    "这个合集做过"就跳过，否则新目录永远是空的。所以先绝对化 + 大小写折叠 +
+    统一斜杠再取 8 位哈希（同一落点的不同写法必须指同一个文件）。
+    season_id 来自各平台 resolve_input（数字 sid / BV 号 / feed 地址），含 URL
+    特殊字符，统一走文件名清洗；完整值与落点存在文件内容里，load 时核对防碰撞。
     """
     stem = sanitize_filename(season_id)[:40] or "_"
     if output_dir and str(output_dir).strip():
-        stem = f"{stem}-{target_fingerprint(output_dir)}"
+        target = str(Path(output_dir).resolve()).casefold().replace("\\", "/")
+        stem = f"{stem}-{_short_hash(target)}"
     return state_root(root) / f"{stem}.json"
 
 
@@ -198,9 +184,7 @@ def record_episode(
     """登记一集的结论（只改内存；落盘时机由调用方 save_collection 决定）。"""
     key = episode_key(episode)
     state.episodes[key] = EpisodeState(
-        key=key,
         index=episode.index,
-        bvid=episode.bvid,
         title=episode.title,
         status=status,
         reason=reason,

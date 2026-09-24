@@ -161,6 +161,34 @@ def test_audio_cache_kept_on_failure_and_reused_on_rerun(tmp_path, monkeypatch):
     assert not cached.exists()  # 成功即删
 
 
+def test_interrupted_download_leaves_no_poisoned_cache(tmp_path, fake_transcribe):
+    """下载中途断线不能留下半截文件。
+
+    缓存命中只判「存在且非空」，半截文件会被当成有效缓存永远不再重下 —— 转写
+    必然失败，且只能手工删文件才能恢复。所以下载先写 .part 再整体换名。
+    """
+    class HalfwayClient(FakeAsrClient):
+        def download_audio(self, episode, dest):
+            self.downloads.append(episode.bvid)
+            dest.write_bytes(b"half")  # 写了一半
+            raise PlatformError("音频下载失败（连接中断）")
+
+    episodes = _episodes(1)
+    client = HalfwayClient(episodes=episodes, script={1: None})
+    outcome = run_collection("100", tmp_path, client, asr=True)
+
+    assert outcome.results[0].status == EpisodeStatus.FAILED
+    cache_dir = state.audio_cache_root()
+    assert list(cache_dir.glob("*")) == []  # 既没半截 .bin，也没留下 .part
+
+    # 关键：重跑仍然重新下载，没有被半截文件卡死
+    retry = FakeAsrClient(episodes=episodes, script={1: None})
+    assert run_collection("100", tmp_path, retry, asr=True).results[0].status == (
+        EpisodeStatus.SUCCESS
+    )
+    assert retry.downloads == ["BV01"]
+
+
 def test_audio_cache_deleted_on_success(tmp_path, fake_transcribe):
     episodes = _episodes(1)
     client = FakeAsrClient(episodes=episodes, script={1: None})
