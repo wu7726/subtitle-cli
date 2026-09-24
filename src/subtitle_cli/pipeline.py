@@ -12,7 +12,7 @@ from typing import Callable, Literal, Protocol
 
 from pydantic import BaseModel
 
-from . import notes, storage
+from . import notes, state, storage
 from . import asr as asr_module  # 别名：run_collection 的 asr 参数会遮蔽模块名
 from .bilibili.client import BilibiliError, RiskControlError
 from .bilibili.models import Episode, EpisodeResult, EpisodeStatus, SubtitleTrack
@@ -110,6 +110,7 @@ def run_collection(
     asr: bool = False,
     asr_model: str = ASR_MODEL_SIZE,
     asr_limit: int | None = None,
+    state_root: Path | None = None,
 ) -> RunOutcome:
     """跑完整流程。输入不合法抛 ValueError（CLI 转为退出码 2）。
 
@@ -117,11 +118,15 @@ def run_collection(
     合集索引页（PRD F3）；正文仍由 converter 产出，一字不动。
     asr=True：无现成字幕/文稿的分集下载音频走本地语音转写兜底
     （多平台扩展计划 §3 第 2 步）；依赖未安装时抛 AsrDependencyError。
+    state_root：状态文件落点（默认 ~/.subtitle-cli/runs/）；每集结束立即
+    落盘，进程中断也不丢已完成的结论。
     """
     season_id = client.resolve_input(raw_input)
     collection_name, episodes = client.list_episodes(season_id)
     fetched = fetched_at or date.today()
     author = _uploader_of(client, episodes)
+    collection_state = state.load_collection(season_id, state_root)
+    collection_state.collection_name = collection_name
     log(f"合集《{collection_name}》共 {len(episodes)} 集，输出目录：{output_dir}")
     _check_login(client, log)
 
@@ -139,12 +144,22 @@ def run_collection(
     reports: list[AuditReport] = []
     asr_count = 0
 
+    def _finish(episode: Episode, status: EpisodeStatus, reason: str | None = None) -> None:
+        """登记一集的结果：写内存 + 立即原子落盘，中断也不丢已完成的结论。"""
+        results.append(EpisodeResult(episode=episode, status=status, reason=reason))
+        state.record_episode(collection_state, episode, status, reason)
+        try:
+            state.save_collection(collection_state, state_root)
+        except OSError as exc:
+            # 状态是辅助记录，写不进去不该毁掉本次提取
+            log(f"⚠️ 状态记录写入失败（不影响本次提取）：{exc}")
+
     for episode in episodes:
         label = f"EP{episode.index:02d}"
         path = storage.output_path(output_dir, collection_name, episode.index, episode.title)
 
         if storage.is_downloaded(path):
-            results.append(EpisodeResult(episode=episode, status=EpisodeStatus.SKIPPED))
+            _finish(episode, EpisodeStatus.SKIPPED)
             log(f"{label} 已存在，跳过")
             continue
         if path.exists():
@@ -155,7 +170,7 @@ def run_collection(
             track = client.fetch_subtitles(episode)
         except RiskControlError as exc:
             consecutive_risk += 1
-            results.append(EpisodeResult(episode=episode, status=EpisodeStatus.FAILED, reason=str(exc)))
+            _finish(episode, EpisodeStatus.FAILED, str(exc))
             log(f"{label} 失败：{exc}")
             if consecutive_risk >= RISK_ABORT_THRESHOLD:
                 aborted = True
@@ -164,31 +179,31 @@ def run_collection(
             continue
         except BilibiliError as exc:
             consecutive_risk = 0
-            results.append(EpisodeResult(episode=episode, status=EpisodeStatus.FAILED, reason=str(exc)))
+            _finish(episode, EpisodeStatus.FAILED, str(exc))
             log(f"{label} 失败：{exc}")
             continue
         except PlatformError as exc:
             # 非B站平台（播客等）的接口错误，按普通失败处理
             consecutive_risk = 0
-            results.append(EpisodeResult(episode=episode, status=EpisodeStatus.FAILED, reason=str(exc)))
+            _finish(episode, EpisodeStatus.FAILED, str(exc))
             log(f"{label} 失败：{exc}")
             continue
 
         consecutive_risk = 0
         if track is None and asr:
             if asr_limit is not None and asr_count >= asr_limit:
-                results.append(EpisodeResult(episode=episode, status=EpisodeStatus.NO_SUBTITLE))
+                _finish(episode, EpisodeStatus.NO_SUBTITLE)
                 log(f"{label} 无字幕（已达本次转写上限 {asr_limit} 集，未转写）")
                 continue
             try:
                 track = _asr_fallback(client, episode, asr_model, log)
                 asr_count += 1
             except PlatformError as exc:
-                results.append(EpisodeResult(episode=episode, status=EpisodeStatus.FAILED, reason=str(exc)))
+                _finish(episode, EpisodeStatus.FAILED, str(exc))
                 log(f"{label} 失败：{exc}")
                 continue
         if track is None:
-            results.append(EpisodeResult(episode=episode, status=EpisodeStatus.NO_SUBTITLE))
+            _finish(episode, EpisodeStatus.NO_SUBTITLE)
             log(f"{label} 无字幕")
             continue
 
@@ -209,10 +224,10 @@ def run_collection(
         try:
             storage.write_markdown(path, content)
         except OSError as exc:
-            results.append(EpisodeResult(episode=episode, status=EpisodeStatus.FAILED, reason=f"写入失败：{exc}"))
+            _finish(episode, EpisodeStatus.FAILED, f"写入失败：{exc}")
             log(f"{label} 失败：写入失败（{exc}）")
             continue
-        results.append(EpisodeResult(episode=episode, status=EpisodeStatus.SUCCESS))
+        _finish(episode, EpisodeStatus.SUCCESS)
         if note_mode == "obsidian":
             log(f"已写入 vault：{path.name}")
         else:
