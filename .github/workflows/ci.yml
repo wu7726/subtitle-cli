@@ -23,7 +23,7 @@ jobs:
           enable-cache: true
 
       - name: 同步依赖（按 uv.lock 锁定版本）
-        run: uv sync --extra dev
+        run: uv sync --locked --extra dev
 
       - name: Lint（ruff）
         run: uv run ruff check .

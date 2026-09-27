@@ -1122,7 +1122,6 @@ wheels = [
 
 [[package]]
 name = "subtitle-cli"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -1150,7 +1149,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["dev", "asr"]
+provides-extras = ["asr", "dev"]
 
 [[package]]
 name = "sympy"
