@@ -1,6 +1,9 @@
 @echo off
 rem Launch the local web UI (double-click friendly). ASCII-only on purpose:
 rem cmd parses batch files in the ANSI codepage and UTF-8 Chinese text garbles.
+chcp 65001 >nul
+set PYTHONIOENCODING=utf-8
+title subtitle-cli web UI
 cd /d "%~dp0"
 if not exist ".venv\Scripts\python.exe" (
     echo [ERROR] .venv not found. Run inside the project folder:
