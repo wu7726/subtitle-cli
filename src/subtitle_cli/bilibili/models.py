@@ -6,9 +6,16 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 
 from pydantic import BaseModel, Field
+
+try:
+    from enum import StrEnum  # Python 3.11+
+except ImportError:  # Python 3.10：str() / f-string 表现为成员值，对齐 StrEnum 语义
+    class StrEnum(str, Enum):
+        def __str__(self) -> str:
+            return str(self.value)
 
 
 # ---- 领域模型（跨层流转的数据） ----
