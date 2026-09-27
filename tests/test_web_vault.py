@@ -274,3 +274,31 @@ def test_browse_api(tmp_path: Path):
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+def test_web_rejects_dead_vault_root(tmp_path: Path):
+    """失效 vault 根：提取/迁移一律 400 拒绝，绝不静默 mkdir 重建死路径，
+    也不把死路径写进配置（对齐 CLI「校验通过才写回」的既有纪律）。"""
+    proc, base = _start_server(tmp_path)
+    try:
+        dead = tmp_path / "ghost-vault"
+        status, resp = _post(base, "/api/extract", {"demo": True, "vault": str(dead)})
+        assert status == 400 and "vault 路径不可用" in resp["error"]
+        assert not dead.exists()  # 未被盲目重建
+        status, text = _get(base, "/api/config")
+        assert json.loads(text)["vault"] == ""  # 死路径未被记住
+
+        legacy = make_legacy(tmp_path)
+        status, resp = _post(
+            base, "/api/migrate", {"dir": str(legacy), "vault": str(dead)}
+        )
+        assert status == 400 and "vault 路径不可用" in resp["error"]
+        assert not dead.exists()
+        status, text = _get(base, "/api/config")
+        assert json.loads(text)["vault"] == ""
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()

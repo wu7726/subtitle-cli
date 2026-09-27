@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import random
 import re
 import time
@@ -77,6 +78,22 @@ def normalize_cookie(raw: str) -> tuple[str, str | None]:
         "输入的 Cookie 中没有 SESSDATA 字段——可能复制自未登录的会话，"
         "或只复制了部分片段。请在已登录的浏览器中按 README 说明重新复制。",
     )
+
+
+def resolve_bilibili_cookie(raw: str | None) -> tuple[str, str | None]:
+    """CLI 与网页共用的 Cookie 解析（来源优先级：显式传入 > BILI_COOKIE）。
+
+    规范化并强制 SESSDATA 门禁：缺失时抛 ValueError（消息取 normalize_cookie
+    的用户指引）。空输入返回 ("", None)——无 Cookie 是合法状态（字幕列表会为
+    空，由调用方决定是否继续）。
+    """
+    value = (raw or "").strip() or os.environ.get("BILI_COOKIE") or ""
+    if not value:
+        return "", None
+    cookie, note = normalize_cookie(value)
+    if "sessdata" not in cookie.lower():
+        raise ValueError(note or "Cookie 中没有 SESSDATA 字段，无法获取字幕列表")
+    return cookie, note
 
 
 class BilibiliClient:

@@ -14,6 +14,7 @@ from .bilibili.client import extract_bvid
 from .douyin.client import DouyinClient
 from .pipeline import PlatformClient
 from .podcast.client import PodcastClient
+from .vault import VaultConfig
 
 BILIBILI = "bilibili"
 PODCAST = "podcast"
@@ -46,3 +47,22 @@ def create_client(raw: str, cookie: str | None = None) -> PlatformClient:
     if platform == DOUYIN:
         return DouyinClient()
     return BilibiliClient(cookie=cookie)
+
+
+def platform_subdir(cfg: VaultConfig, platform: str) -> str:
+    """该平台在 vault 内的子目录（播客/抖音各有专属默认，B站用 subdir）。"""
+    if platform == PODCAST:
+        return cfg.podcast_subdir
+    if platform == DOUYIN:
+        return cfg.douyin_subdir
+    return cfg.subdir
+
+
+def set_platform_subdir(cfg: VaultConfig, platform: str, value: str) -> None:
+    """把用户显式指定的子目录记到对应平台字段上（CLI 与网页共用）。"""
+    if platform == PODCAST:
+        cfg.podcast_subdir = value
+    elif platform == DOUYIN:
+        cfg.douyin_subdir = value
+    else:
+        cfg.subdir = value

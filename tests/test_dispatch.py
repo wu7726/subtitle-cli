@@ -45,3 +45,21 @@ def test_create_client_ignores_cookie_for_non_bilibili():
     client = create_client("https://example.com/feed.xml", cookie="SESSDATA=x")
     assert isinstance(client, PodcastClient)
     client.close()
+
+
+def test_platform_subdir_read_and_write():
+    from subtitle_cli.vault import VaultConfig
+
+    from subtitle_cli.dispatch import platform_subdir, set_platform_subdir
+
+    cfg = VaultConfig()
+    assert platform_subdir(cfg, BILIBILI) == "B站字幕"
+    assert platform_subdir(cfg, PODCAST) == "播客字幕"
+    assert platform_subdir(cfg, DOUYIN) == "抖音字幕"
+
+    set_platform_subdir(cfg, PODCAST, "学习/播客")
+    set_platform_subdir(cfg, DOUYIN, "抖音存档")
+    set_platform_subdir(cfg, BILIBILI, "学习/B站字幕")
+    assert cfg.podcast_subdir == "学习/播客"
+    assert cfg.douyin_subdir == "抖音存档"
+    assert cfg.subdir == "学习/B站字幕"

@@ -14,8 +14,16 @@ import typer
 
 from . import config
 from .asr import AsrDependencyError
-from .bilibili.client import RiskControlError, normalize_cookie
-from .dispatch import BILIBILI, DOUYIN, PODCAST, create_client, detect_platform
+from .bilibili.client import RiskControlError, resolve_bilibili_cookie
+from .dispatch import (
+    BILIBILI,
+    DOUYIN,
+    PODCAST,
+    create_client,
+    detect_platform,
+    platform_subdir,
+    set_platform_subdir,
+)
 from .errors import PlatformError
 from .pipeline import format_preview, has_failure, preview_first_episode, run_collection, summarize
 from .stdio import force_utf8_stdio
@@ -86,8 +94,8 @@ def main(
     asr_model: str = typer.Option(
         config.ASR_MODEL_SIZE,
         "--asr-model",
-        help="语音转写模型：tiny/base/small/medium（越大越准越慢，默认 medium；"
-        "回退到 CPU 时建议改 small）",
+        help=f"语音转写模型：{'/'.join(config.ASR_MODEL_CHOICES)}（越大越准越慢，"
+        f"默认 {config.ASR_MODEL_SIZE}；回退到 CPU 时建议改 small）",
     ),
     asr_limit: Optional[int] = typer.Option(
         None,
@@ -108,14 +116,17 @@ def main(
     """提取B站合集或播客的字幕，保存为 Markdown 文件。"""
     force_utf8_stdio()
     platform = detect_platform(source)
-    cookie = cookie or os.environ.get("BILI_COOKIE") or None
-    if cookie and platform == BILIBILI:
-        cookie, cookie_note = normalize_cookie(cookie)
+    cookie_input = cookie or os.environ.get("BILI_COOKIE") or ""
+    cookie = cookie_input or None
+    if platform == BILIBILI:
+        try:
+            cookie, cookie_note = resolve_bilibili_cookie(cookie_input)
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=2) from None
         if cookie_note:
             typer.echo(cookie_note)
-        if "sessdata" not in cookie.lower():
-            typer.echo("无法获取字幕列表，已停止。", err=True)
-            raise typer.Exit(code=2)
+        cookie = cookie or None
 
     # 输出模式判定（开发计划 M7 + 播客分目录）：--output 显式给出 → 普通文件夹
     # 优先；否则已配置 vault（参数 > 配置文件，显式传入即写回）→ obsidian 模式；
@@ -124,24 +135,12 @@ def main(
     if vault:
         cfg.vault = vault
     if vault_subdir:
-        if platform == PODCAST:
-            cfg.podcast_subdir = vault_subdir
-        elif platform == DOUYIN:
-            cfg.douyin_subdir = vault_subdir
-        else:
-            cfg.subdir = vault_subdir
+        set_platform_subdir(cfg, platform, vault_subdir)
 
     if output is None and cfg.vault.strip():
         note_mode = "obsidian"
         _check_vault_root(cfg.vault)  # 不可用直接退出 2，绝不静默 mkdir 重建死路径
-        default_subdir = (
-            cfg.podcast_subdir
-            if platform == PODCAST
-            else cfg.douyin_subdir
-            if platform == DOUYIN
-            else cfg.subdir
-        )
-        output = collection_root(cfg, vault_subdir or default_subdir)
+        output = collection_root(cfg, vault_subdir or platform_subdir(cfg, platform))
     else:
         note_mode = "plain"
         output = output if output is not None else Path(".")

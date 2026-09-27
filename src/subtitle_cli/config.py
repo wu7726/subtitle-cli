@@ -36,6 +36,7 @@ TITLE_MAX_CHARS = 60  # 文件名中标题截断长度，保证整路径远低�
 # ---- 本地语音转写（ASR 兜底，多平台扩展计划 §3 第 2 步）----
 ASR_MODEL_SIZE = "medium"  # 默认模型：medium（约 1.5GB）。GPU 下速度充裕；
 # 回退到 CPU 时建议临时改小（--asr-model small），否则可能慢于音频时长
+ASR_MODEL_CHOICES = ("tiny", "base", "small", "medium")  # 网页入参白名单与 CLI 帮助共用
 ASR_DEVICE = "auto"  # auto：有 NVIDIA 显卡用 CUDA，否则 CPU
 ASR_COMPUTE_TYPE = "auto"  # auto：CUDA→float16，CPU→int8
 ASR_BEAM_SIZE = 5  # 束搜索宽度；GPU 上 5 是速度与准确率的平衡点，CPU 可降为 1

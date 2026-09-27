@@ -42,9 +42,16 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT))
 
 from subtitle_cli import config, storage  # noqa: E402
-from subtitle_cli.bilibili.client import BilibiliClient, normalize_cookie  # noqa: E402
+from subtitle_cli.bilibili.client import BilibiliClient, resolve_bilibili_cookie  # noqa: E402
 from subtitle_cli.bilibili.models import EpisodeStatus  # noqa: E402
-from subtitle_cli.dispatch import BILIBILI, DOUYIN, PODCAST, create_client, detect_platform  # noqa: E402
+from subtitle_cli.dispatch import (  # noqa: E402
+    BILIBILI,
+    PODCAST,
+    create_client,
+    detect_platform,
+    platform_subdir,
+    set_platform_subdir,
+)
 from subtitle_cli.migration import (  # noqa: E402
     format_migration_summary,
     migrate,
@@ -197,13 +204,6 @@ def run_extract_job(
         if demo and asr:
             _log("演示模式不支持语音转写，本次按普通提取执行")
             asr = False
-        if not demo and platform == BILIBILI and cookie:
-            cookie, cookie_note = normalize_cookie(cookie)
-            if cookie_note:
-                _log(cookie_note)
-            if "sessdata" not in cookie.lower():
-                _finish_error(cookie_note or "Cookie 中没有 SESSDATA 字段。", 2)
-                return
         if demo:
             # 演示模式同样支持粘贴视频链接（Mock 的 view 路由会反查出演示合集）；
             # 输入为空时使用默认演示合集链接
@@ -404,14 +404,16 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/check-cookie":
-            # 登录态检测：粘贴后先验证，避免空跑全部集数
+            # 登录态检测：粘贴后先验证，避免空跑全部集数。
+            # 只看显式粘贴的内容，不回退 BILI_COOKIE（按钮语义就是"验证粘贴的这段"）
             raw = (data.get("cookie") or "").strip()
             if not raw:
                 self._json({"ok": False, "message": "请先粘贴 Cookie"}, 400)
                 return
-            cookie, note = normalize_cookie(raw)
-            if "sessdata" not in cookie.lower():
-                self._json({"ok": False, "message": note or "Cookie 中没有 SESSDATA 字段。"})
+            try:
+                cookie, note = resolve_bilibili_cookie(raw)
+            except ValueError as exc:
+                self._json({"ok": False, "message": str(exc)})
                 return
             try:
                 with BilibiliClient(cookie=cookie) as client:
@@ -440,7 +442,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
             demo = bool(data.get("demo"))
             source = (data.get("source") or "").strip()
-            cookie = (data.get("cookie") or "").strip() or os.environ.get("BILI_COOKIE") or ""
+            cookie = (data.get("cookie") or "").strip()
             vault = (data.get("vault") or "").strip()
             if not demo and not source:
                 self._json({"error": "缺少合集链接或 season_id"}, 400)
@@ -450,11 +452,8 @@ class Handler(BaseHTTPRequestHandler):
                 if demo and platform == PODCAST:
                     self._json({"error": "演示模式使用内置B站示例数据，仅支持B站输入"}, 400)
                     return
-                if not demo and platform == BILIBILI and cookie:
-                    cookie, _ = normalize_cookie(cookie)
-                    if "sessdata" not in cookie.lower():
-                        self._json({"error": "Cookie 中没有 SESSDATA 字段，无法获取字幕列表"}, 400)
-                        return
+                if not demo and platform == BILIBILI:
+                    cookie, _ = resolve_bilibili_cookie(cookie)
                 lines: list[str] = []
                 if demo:
                     from demo.run_demo import DEMO_SOURCE
@@ -494,36 +493,45 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/extract":
             demo = bool(data.get("demo"))
             source = (data.get("source") or "").strip()
-            cookie = (data.get("cookie") or "").strip() or os.environ.get("BILI_COOKIE") or ""
             vault = (data.get("vault") or "").strip()
             vault_subdir = (data.get("vault_subdir") or "").strip()
             subdir_used = vault_subdir
             try:
-                if demo and detect_platform(source) != BILIBILI:
+                platform = detect_platform(source)
+                if demo and platform != BILIBILI:
                     self._json({"error": "演示模式使用内置B站示例数据，仅支持B站输入"}, 400)
                     return
+                if not demo and not source:
+                    self._json({"error": "缺少合集链接或 season_id"}, 400)
+                    return
+                cookie = ""
+                if not demo and platform == BILIBILI:
+                    try:
+                        cookie, note = resolve_bilibili_cookie(data.get("cookie"))
+                    except ValueError as exc:
+                        self._json({"error": str(exc)}, 400)
+                        return
+                    if note:
+                        _log(note)
                 if vault:
-                    # 传入即记住（PRD §5.1）；同时决定输出落点与笔记格式。
-                    # 播客/抖音输入各自落专属文件夹，B站落 subdir，互不干扰
+                    # 传入即记住（PRD §5.1）。校验通过才写回、才建目录（与 CLI
+                    # 同一纪律）：失效 vault 根一律拒绝，绝不静默 mkdir 重建死路径
+                    status = check_vault(vault)
+                    if not status.ok:
+                        self._json(
+                            {
+                                "error": f"vault 路径不可用：{vault}（{status.message}）；"
+                                "可先在「检查 vault」中创建该文件夹"
+                            },
+                            400,
+                        )
+                        return
                     cfg = load_config()
                     cfg.vault = vault
-                    platform = detect_platform(source)
                     if vault_subdir:
-                        if platform == PODCAST:
-                            cfg.podcast_subdir = vault_subdir
-                        elif platform == DOUYIN:
-                            cfg.douyin_subdir = vault_subdir
-                        else:
-                            cfg.subdir = vault_subdir
+                        set_platform_subdir(cfg, platform, vault_subdir)
                     save_config(cfg)
-                    cfg = load_config()
-                    subdir_used = vault_subdir or (
-                        cfg.podcast_subdir
-                        if platform == PODCAST
-                        else cfg.douyin_subdir
-                        if platform == DOUYIN
-                        else cfg.subdir
-                    )
+                    subdir_used = vault_subdir or platform_subdir(cfg, platform)
                     output = str(collection_root(cfg, subdir_used))
                     note_mode = "obsidian"
                 else:
@@ -532,12 +540,9 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 self._json({"error": str(exc)}, 400)
                 return
-            if not demo and not source:
-                self._json({"error": "缺少合集链接或 season_id"}, 400)
-                return
             asr = bool(data.get("asr")) and not demo
             asr_model = str(data.get("asr_model") or config.ASR_MODEL_SIZE)
-            if asr_model not in ("tiny", "base", "small", "medium"):
+            if asr_model not in config.ASR_MODEL_CHOICES:
                 asr_model = config.ASR_MODEL_SIZE
             asr_limit_raw = data.get("asr_limit")
             asr_limit = (
@@ -586,6 +591,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": f"旧字幕目录不存在：{source_dir}"}, 400)
                 return
             if vault:
+                # 与提取同一纪律：失效 vault 根拒绝并写回前拦截
+                status = check_vault(vault)
+                if not status.ok:
+                    self._json({"error": f"vault 路径不可用：{vault}（{status.message}）"}, 400)
+                    return
                 cfg = load_config()
                 cfg.vault = vault
                 if vault_subdir:

@@ -16,6 +16,7 @@ from subtitle_cli.bilibili.client import (
     BilibiliError,
     RiskControlError,
     normalize_cookie,
+    resolve_bilibili_cookie,
 )
 from subtitle_cli.bilibili.models import Episode
 
@@ -530,3 +531,36 @@ def test_fetch_subtitles_carries_aid_when_view_cached(load_fixture):
     assert track is not None and track.lan == "zh-CN"
     assert player_requests[0]["aid"] == "12345"
     assert player_requests[0]["cid"] == "101"
+
+
+def test_resolve_cookie_empty_without_env(monkeypatch):
+    monkeypatch.delenv("BILI_COOKIE", raising=False)
+    assert resolve_bilibili_cookie("") == ("", None)
+    assert resolve_bilibili_cookie(None) == ("", None)
+    assert resolve_bilibili_cookie("  ") == ("", None)
+
+
+def test_resolve_cookie_env_fallback(monkeypatch):
+    monkeypatch.setenv("BILI_COOKIE", "SESSDATA=env-value")
+    cookie, note = resolve_bilibili_cookie(None)
+    assert cookie == "SESSDATA=env-value" and note is None
+
+
+def test_resolve_cookie_explicit_overrides_env(monkeypatch):
+    monkeypatch.setenv("BILI_COOKIE", "SESSDATA=env-value")
+    cookie, _ = resolve_bilibili_cookie("SESSDATA=explicit")
+    assert cookie == "SESSDATA=explicit"
+
+
+def test_resolve_cookie_bare_value_autocompletes(monkeypatch):
+    monkeypatch.delenv("BILI_COOKIE", raising=False)
+    cookie, note = resolve_bilibili_cookie("xx%2Fyy")
+    assert cookie == "SESSDATA=xx%2Fyy"
+    assert note is not None and "自动按 SESSDATA 处理" in note
+
+
+def test_resolve_cookie_missing_sessdata_raises(monkeypatch):
+    monkeypatch.delenv("BILI_COOKIE", raising=False)
+    with pytest.raises(ValueError) as excinfo:
+        resolve_bilibili_cookie("buvid3=abc; b_nut=1")
+    assert "SESSDATA" in str(excinfo.value)
