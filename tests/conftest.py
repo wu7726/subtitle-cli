@@ -20,6 +20,7 @@ def _isolate_user_dirs(tmp_path, monkeypatch):
     """
     monkeypatch.setenv("SUBTITLE_CLI_STATE_DIR", str(tmp_path / "_state"))
     monkeypatch.setenv("SUBTITLE_CLI_AUDIO_CACHE_DIR", str(tmp_path / "_audio-cache"))
+    monkeypatch.setenv("SUBTITLE_CLI_LOG_DIR", str(tmp_path / "_logs"))
 
 
 @pytest.fixture

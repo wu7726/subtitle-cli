@@ -52,6 +52,7 @@ from subtitle_cli.dispatch import (  # noqa: E402
     platform_subdir,
     set_platform_subdir,
 )
+from subtitle_cli.logging_setup import setup_logging  # noqa: E402
 from subtitle_cli.migration import (  # noqa: E402
     format_migration_summary,
     migrate,
@@ -69,6 +70,7 @@ from subtitle_cli.vault import check_vault, collection_root, load_config, save_c
 INDEX_HTML = REPO_ROOT / "web" / "index.html"
 
 _lock = threading.Lock()
+file_log = setup_logging()  # 轮转文件日志：任务起止与异常 traceback 的事后取证
 
 
 class LocalServer(ThreadingHTTPServer):
@@ -198,6 +200,9 @@ def run_extract_job(
 ) -> None:
     try:
         platform = detect_platform(source)
+        file_log.info(
+            "提取开始：platform=%s demo=%s 落点=%s", platform, demo, output_dir
+        )
         if demo and platform != BILIBILI:
             _finish_error("演示模式使用内置B站示例数据，仅支持B站输入。", 2)
             return
@@ -221,6 +226,7 @@ def run_extract_job(
         STATE["exit_code"] = 1 if has_failure(outcome) else 0
         STATE["collection_name"] = outcome.collection_name
         STATE["files"] = _badge_files_extract(outcome, Path(output_dir))
+        file_log.info("提取结束：%s", STATE["summary"])
         if note_mode == "obsidian" and vault_path:
             subdir = vault_subdir or load_config().subdir
             STATE["obsidian_open"] = _obsidian_uri(
@@ -228,8 +234,10 @@ def run_extract_job(
             )
         STATE["phase"] = "done"
     except ValueError as exc:
+        file_log.error("提取输入无效：%s", exc)
         _finish_error(str(exc), 2)
-    except Exception as exc:  # noqa: BLE001 - 网页界面兜底展示
+    except Exception as exc:  # noqa: BLE001 - 网页界面兜底展示；traceback 进文件日志
+        file_log.exception("提取任务异常")
         _finish_error(f"{type(exc).__name__}: {exc}")
     finally:
         if demo:
@@ -241,6 +249,7 @@ def run_migrate_job(
     source_dir: str, collections: list[str] | None, overwrite: bool
 ) -> None:
     try:
+        file_log.info("迁移开始：source=%s overwrite=%s", source_dir, overwrite)
         outcome = migrate(
             Path(source_dir),
             load_config(),
@@ -254,6 +263,7 @@ def run_migrate_job(
         )
         STATE["exit_code"] = 1 if failed else 0
         STATE["files"] = []
+        file_log.info("迁移结束：%s", STATE["summary"])
         for r in outcome.results:
             if r.index_path:
                 STATE["files"].append({"name": Path(r.index_path).name, "badge": "索引"})
@@ -281,8 +291,10 @@ def run_migrate_job(
                 )
         STATE["phase"] = "done"
     except ValueError as exc:
+        file_log.error("迁移输入无效：%s", exc)
         _finish_error(str(exc), 2)
-    except Exception as exc:  # noqa: BLE001 - 网页界面兜底展示
+    except Exception as exc:  # noqa: BLE001 - 网页界面兜底展示；traceback 进文件日志
+        file_log.exception("迁移任务异常")
         _finish_error(f"{type(exc).__name__}: {exc}")
     finally:
         STATE["running"] = False
@@ -475,7 +487,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(payload)
             except ValueError as exc:
                 self._json({"error": str(exc)}, 400)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 - traceback 进文件日志
+                file_log.exception("预览异常")
                 self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
             return
 

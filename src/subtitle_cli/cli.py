@@ -25,6 +25,7 @@ from .dispatch import (
     set_platform_subdir,
 )
 from .errors import PlatformError
+from .logging_setup import setup_logging
 from .pipeline import format_preview, has_failure, preview_first_episode, run_collection, summarize
 from .stdio import force_utf8_stdio
 from .vault import check_vault, collection_root, load_config, save_config
@@ -115,6 +116,7 @@ def main(
 ) -> None:
     """提取B站合集或播客的字幕，保存为 Markdown 文件。"""
     force_utf8_stdio()
+    file_log = setup_logging()
     platform = detect_platform(source)
     cookie_input = cookie or os.environ.get("BILI_COOKIE") or ""
     cookie = cookie_input or None
@@ -158,11 +160,15 @@ def main(
     try:
         with create_client(source, cookie) as client:
             if preview:
+                file_log.info("预览第 1 集：%s", source)
                 result = preview_first_episode(
                     source, client, log=typer.echo, note_mode=note_mode
                 )
                 typer.echo(format_preview(result))
                 raise typer.Exit(code=0)
+            file_log.info(
+                "提取开始：platform=%s 落点=%s asr=%s", platform, output, asr
+            )
             outcome = run_collection(
                 source, output, client, log=typer.echo, note_mode=note_mode,
                 asr=asr, asr_model=asr_model, asr_limit=asr_limit, recheck=recheck,
@@ -185,6 +191,7 @@ def main(
         raise typer.Exit(code=130) from None
 
     typer.echo(summarize(outcome))
+    file_log.info("提取结束：%s", summarize(outcome))
     if has_failure(outcome):
         raise typer.Exit(code=1)
 

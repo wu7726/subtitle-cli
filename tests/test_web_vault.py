@@ -153,6 +153,10 @@ def test_web_vault_apis(tmp_path: Path):
         assert state["phase"] == "done" and state["exit_code"] == 0, state
         assert state["note_mode"] == "obsidian"
         assert state["files"][0]["badge"] == "索引"
+        # 文件日志记录任务起止（事后取证渠道）；Cookie 纪律同样适用于日志
+        log_text = (tmp_path / "_logs" / "subtitle-cli.log").read_text(encoding="utf-8")
+        assert "提取开始" in log_text and "提取结束" in log_text
+        assert "SESSDATA" not in log_text
         # 索引页 + 分集在嵌套子目录下
         nested = vault / "学习" / "字幕" / "示例合集·美食漫谈"
         assert (nested / "示例合集·美食漫谈.md").exists()
