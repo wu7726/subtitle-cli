@@ -3,137 +3,391 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>B站合集字幕提取器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
+  /* ---------- tokens ---------- */
   :root {
-    --accent: #7c5ce0; --accent-strong: #6a4bd0; --accent-soft: #f1edfd;
-    --bg: #f7f6f3; --card: #ffffff; --ink: #2c2c28; --muted: #8b8a84;
-    --border: #e6e4de; --border-strong: #d8d6cf;
-    --ok: #3d9a50; --skip: #3b7dd8; --warn: #c07f2d; --fail: #cc4b3d;
+    --accent: #8b5cf6; --accent-strong: #a78bfa; --accent-2: #22d3ee;
+    --accent-soft: rgba(139, 92, 246, .16);
+    --bg: #0a0912; --card: rgba(255, 255, 255, .035);
+    --card-border: rgba(255, 255, 255, .09);
+    --ink: #f1eff8; --muted: #9b96b0; --dim: #6f6a86;
+    --line: rgba(255, 255, 255, .08);
+    --ok: #4ade80; --skip: #60a5fa; --warn: #fbbf24; --fail: #f87171;
+    --radius: 18px;
+    --mono: "Geist Mono", "Cascadia Code", Consolas, monospace;
   }
+  @property --sb { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; background: var(--bg); color: var(--ink); }
-  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 18px 20px; }
-  header .wrap { max-width: 860px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
-  .logo { width: 34px; height: 34px; border-radius: 9px; flex: none;
-    background: linear-gradient(135deg, #8f6cf1, #6a4bd0); color: #fff; font-weight: 700;
-    display: flex; align-items: center; justify-content: center; font-size: 17px; }
-  header h1 { margin: 0; font-size: 16px; letter-spacing: .3px; }
-  header p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
-  main { max-width: 860px; margin: 0 auto; padding: 22px 20px 40px; display: grid; gap: 16px; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; box-shadow: 0 1px 2px rgba(40,35,25,.04); }
-  .card h2 { margin: 0 0 14px; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .12em; }
-  .card h2 .bar { display: inline-block; width: 4px; height: 13px; border-radius: 2px; background: var(--accent); vertical-align: -2px; margin-right: 8px; }
+  [hidden] { display: none !important; }
+  html { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100vh;
+    font-family: "Geist", "Noto Sans SC", "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg); color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgba(139, 92, 246, .4); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 8px; border: 2px solid var(--bg); }
+  ::-webkit-scrollbar-track { background: transparent; }
+  :focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; border-radius: 6px; }
+
+  /* ---------- reactbits · DotGrid 终端暗色环境 ---------- */
+  .dotgrid { position: fixed; inset: 0; z-index: -2; pointer-events: none;
+    background-image: radial-gradient(rgba(167, 139, 250, .17) 1px, transparent 1.4px);
+    background-size: 26px 26px;
+    -webkit-mask-image: radial-gradient(90% 72% at 50% 6%, #000 26%, transparent 76%);
+    mask-image: radial-gradient(90% 72% at 50% 6%, #000 26%, transparent 76%); }
+  .glow { position: fixed; inset: -30%; z-index: -3; filter: blur(110px) saturate(1.1); opacity: .42;
+    pointer-events: none; }
+  .glow i { position: absolute; border-radius: 50%; will-change: transform; }
+  .glow .g1 { width: 52vw; height: 52vw; top: -14%; left: -6%;
+    background: radial-gradient(circle at 40% 40%, rgba(109, 40, 217, .85), transparent 62%);
+    animation: drift1 36s ease-in-out infinite alternate; }
+  .glow .g2 { width: 42vw; height: 42vw; bottom: -16%; right: -8%;
+    background: radial-gradient(circle at 55% 45%, rgba(14, 116, 144, .5), transparent 62%);
+    animation: drift3 44s ease-in-out infinite alternate; }
+  @keyframes drift1 { to { transform: translate(9vw, 8vh) scale(1.15) rotate(14deg); } }
+  @keyframes drift3 { to { transform: translate(-6vw, -9vh) scale(1.2); } }
+  body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(120% 70% at 50% -10%, rgba(139, 92, 246, .14), transparent 55%),
+                radial-gradient(140% 100% at 50% 115%, rgba(10, 9, 18, .92), transparent 60%); }
+  .grain { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+  /* ---------- reactbits · GlassPillNav ---------- */
+  .topbar { position: sticky; top: 12px; z-index: 40; width: min(1180px, calc(100% - 28px));
+    margin: 12px auto 0; border-radius: 999px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    background: rgba(13, 11, 22, .58); border: 1px solid var(--card-border);
+    box-shadow: 0 10px 34px rgba(6, 4, 14, .5);
+    animation: fadeDown .7s cubic-bezier(.2,.7,.3,1) both; }
+  @keyframes fadeDown { from { opacity: 0; transform: translateY(-10px); } }
+  .topbar-in { max-width: none; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .brand { display: flex; align-items: center; gap: 11px; }
+  .logo { width: 36px; height: 36px; border-radius: 11px; flex: none;
+    background: linear-gradient(135deg, #a78bfa, #7c3aed 55%, #0891b2); color: #fff; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; font-size: 17px;
+    box-shadow: 0 4px 18px rgba(124, 58, 237, .45), inset 0 1px 0 rgba(255,255,255,.25); }
+  .brand-name { font-size: 14.5px; font-weight: 700; letter-spacing: .02em; line-height: 1.25; }
+  .brand-sub { font-family: "Geist Mono", Consolas, monospace; font-size: 10.5px; color: var(--dim); letter-spacing: .08em; }
+  .srv { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 13px; background: rgba(255,255,255,.03); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; transition: background .3s; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 0 rgba(74, 222, 128, .5); animation: pulse 2.2s ease-out infinite; }
+  .dot.off { background: var(--fail); }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, .45); } 70% { box-shadow: 0 0 0 7px rgba(74, 222, 128, 0); } 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); } }
+
+  /* ---------- 双区仪表盘布局：左控制台 · 右输出流 ---------- */
+  main { max-width: 1180px; margin: 0 auto; padding: 26px 20px 48px; }
+  .layout { display: grid; grid-template-columns: 408px minmax(0, 1fr); gap: 16px; align-items: start; margin-top: 20px; }
+  .layout > .console { position: sticky; top: 84px; }
+  .bento { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; grid-auto-flow: dense; align-items: start; }
+  #progressCard, #filesCard, #viewerCard { grid-column: 1 / -1; }
+  /* 待命占位：Bento 里还没有任何可见产物卡时补位，出现第一个产物即自动隐退 */
+  .standby { grid-column: 1 / -1; display: none; border: 1px dashed rgba(255,255,255,.15);
+    border-radius: var(--radius); padding: 38px 24px; text-align: center; color: var(--dim);
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: .05em; line-height: 2;
+    background: rgba(255,255,255,.015); }
+  .standby::before { content: "$ "; color: var(--accent-2); opacity: .75; }
+  .bento:not(:has(> section.card:not([hidden]))) .standby { display: block; }
+  @media (max-width: 1080px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .console { position: static; }
+  }
+
+  /* ---------- reactbits · BlurText hero（编辑部式左对齐） ---------- */
+  .hero { padding: 30px 2px 4px; }
+  .hero .prompt { margin: 0 0 14px; font-family: var(--mono); font-size: 13px; color: var(--dim);
+    display: flex; align-items: center; gap: 8px; letter-spacing: .04em; }
+  .hero .prompt b { color: var(--accent-strong); font-weight: 500; }
+  .hero .caret { display: inline-block; width: 9px; height: 1.05em; margin-left: 2px; vertical-align: -2px;
+    background: var(--accent-2); animation: blink 1.15s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .hero h1 {
+    margin: 0; font-size: clamp(2.4rem, 6vw, 3.6rem); font-weight: 800; letter-spacing: .01em; line-height: 1.12;
+  }
+  .hero h1 span { display: inline-block; opacity: 0; filter: blur(12px); transform: translateY(10px);
+    animation: bti .65s cubic-bezier(.2,.7,.3,1) forwards; animation-delay: calc(140ms + var(--i) * 60ms); }
+  @keyframes bti { to { opacity: 1; filter: blur(0); transform: none; } }
+  .hero .sub { margin: 16px 0 0; max-width: 46em; color: var(--muted); font-size: 14.5px; line-height: 1.9;
+    animation: fadeUp .8s .5s cubic-bezier(.2,.7,.3,1) both; }
+  .hero .sub b { background: linear-gradient(92deg, var(--accent-strong), var(--accent-2), var(--accent-strong));
+    background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+    font-weight: 600; animation: shine 5s linear infinite; }
+  @keyframes shine { to { background-position: 200% 0; } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } }
+
+  /* ---------- reactbits · SpotlightCard ---------- */
+  .card {
+    position: relative; overflow: hidden;
+    background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius);
+    padding: 22px 24px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    transition: border-color .35s, transform .35s cubic-bezier(.2,.7,.3,1), box-shadow .35s;
+  }
+  .card::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    border-radius: inherit; opacity: 0; transition: opacity .4s;
+    background: radial-gradient(430px circle at var(--mx, 50%) var(--my, 50%), rgba(139, 92, 246, .14), transparent 58%); }
+  .card:hover { border-color: rgba(139, 92, 246, .32); transform: translateY(-2px);
+    box-shadow: 0 14px 44px rgba(8, 5, 20, .55); }
+  .card:hover::before { opacity: 1; }
+  .card::after { content: ""; position: absolute; top: 0; left: 8%; right: 38%; height: 1px; z-index: 1; pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(167, 139, 250, .65), transparent);
+    opacity: .5; transition: opacity .4s, right .4s; }
+  .card:hover::after { opacity: 1; right: 12%; }
+  .card > * { position: relative; z-index: 1; }
+  .card h2 { margin: 0 0 16px; font-family: var(--mono); font-size: 13px; color: var(--muted); font-weight: 500;
+    letter-spacing: .1em; display: flex; align-items: center; gap: 10px; }
+  .card h2::before { content: "$"; color: var(--accent-2); font-weight: 600; text-shadow: 0 0 12px rgba(34, 211, 238, .55); }
+
+  /* scroll reveal (progressive enhancement; forced-visible fallback below) */
+  html.js .reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s cubic-bezier(.2,.7,.3,1), transform .7s cubic-bezier(.2,.7,.3,1); }
+  html.js .reveal.in { opacity: 1; transform: none; }
+
+  /* ---------- form atoms ---------- */
   label { display: block; font-size: 12.5px; color: var(--muted); margin: 14px 0 6px; }
   label:first-of-type { margin-top: 0; }
-  input[type=text], input[type=password], select {
-    width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: 9px;
-    font-size: 14px; font-family: inherit; outline: none; background: #fcfcfb; color: var(--ink);
+  input[type=text], input[type=password], input[type=number], select {
+    width: 100%; padding: 10px 13px; border: 1px solid rgba(255,255,255,.13); border-radius: 11px;
+    font-size: 14px; font-family: inherit; outline: none; color: var(--ink);
+    background: rgba(255,255,255,.045); transition: border-color .2s, background .2s, box-shadow .2s;
   }
-  input:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px var(--accent-soft); }
-  input:disabled { background: #f0efec; color: var(--muted); }
+  input::placeholder { color: var(--dim); }
+  input:focus, select:focus { border-color: var(--accent); background: rgba(139, 92, 246, .07);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, .22); }
+  input:disabled { background: rgba(255,255,255,.03); color: var(--dim); }
   input[type=radio], input[type=checkbox] { accent-color: var(--accent); }
+  select option { background: #14121f; color: var(--ink); }
+
+  .seg { display: flex; gap: 6px; background: rgba(255,255,255,.035); border: 1px solid var(--line);
+    border-radius: 13px; padding: 4px; }
+  .seg label { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0;
+    padding: 9px 12px; border: 1px solid transparent; border-radius: 10px; cursor: pointer;
+    color: var(--muted); font-size: 13px; font-weight: 500; transition: all .2s; }
+  .seg label:hover { color: var(--ink); }
+  .seg label:has(input:checked) { border-color: rgba(139, 92, 246, .55); background: var(--accent-soft); color: var(--ink); font-weight: 600; }
   .modes { display: flex; gap: 10px; }
-  .modes label {
-    flex: 1; display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px;
-    border: 1px solid var(--border-strong); border-radius: 10px; cursor: pointer; color: var(--ink); font-size: 13px;
-    background: #fcfcfb; transition: border-color .15s, background .15s;
-  }
-  .modes label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
-  .row-btn { margin-top: 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .modes.seg-flat { display: flex; }
+
+  .hint { font-size: 12px; color: var(--dim); margin-top: 8px; line-height: 1.8; }
+
+  .row-btn { margin-top: 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+  /* ---------- reactbits · StarBorder CTA ---------- */
   .primarybtn {
-    background: var(--accent); border: none; color: #fff; font-size: 14px; font-weight: 600;
-    padding: 10px 26px; border-radius: 9px; cursor: pointer; font-family: inherit; transition: background .15s;
+    position: relative; overflow: hidden; isolation: isolate;
+    border: 1px solid transparent; border-radius: 12px; color: #fff;
+    font-size: 14px; font-weight: 600; letter-spacing: .02em; padding: 11px 30px;
+    cursor: pointer; font-family: inherit;
+    background:
+      linear-gradient(180deg, #2a1e4d, #191231) padding-box,
+      conic-gradient(from var(--sb), #8b5cf6, #22d3ee 28%, #8b5cf6 52%, #c084fc 76%, #8b5cf6) border-box;
+    animation: sbro 6s linear infinite;
+    transform: translate3d(var(--magx, 0px), var(--magy, 0px), 0) scale(var(--press, 1));
+    transition: filter .25s; text-shadow: 0 1px 6px rgba(0,0,0,.35);
   }
-  .primarybtn:hover { background: var(--accent-strong); }
-  .primarybtn:disabled { opacity: .5; cursor: not-allowed; }
+  @keyframes sbro { to { --sb: 360deg; } }
+  .primarybtn::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background: linear-gradient(105deg, transparent 42%, rgba(255,255,255,.28) 50%, transparent 58%);
+    transform: translateX(-160%); transition: transform .7s ease; }
+  .primarybtn:hover { filter: brightness(1.18); }
+  .primarybtn:hover::after { transform: translateX(160%); }
+  .primarybtn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+  .primarybtn:disabled::after { display: none; }
+  .primarybtn.sm { font-size: 13px; padding: 8px 20px; border-radius: 10px; }
+
   .ghostbtn {
-    font-size: 12.5px; color: var(--muted); background: none; border: 1px solid var(--border-strong);
-    border-radius: 8px; padding: 7px 14px; cursor: pointer; font-family: inherit; transition: all .15s;
+    font-size: 12.5px; color: var(--muted); background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.13);
+    border-radius: 10px; padding: 8px 15px; cursor: pointer; font-family: inherit; transition: all .2s;
   }
-  .ghostbtn:hover { color: var(--accent); border-color: var(--accent); }
-  .ghostbtn:disabled { opacity: .5; cursor: not-allowed; }
+  .ghostbtn:hover { color: var(--accent-strong); border-color: rgba(139, 92, 246, .55); background: var(--accent-soft); }
+  .ghostbtn:disabled { opacity: .45; cursor: not-allowed; }
+  .ghostbtn:disabled:hover { color: var(--muted); border-color: rgba(255,255,255,.13); background: rgba(255,255,255,.03); }
+
   .inputrow { display: flex; gap: 8px; align-items: center; }
   .inputrow input { flex: 1; }
   .inputrow .ghostbtn { flex: none; }
-  #busy { display: none; color: var(--accent); font-size: 13px; }
-  #busy::before { content: "⏳ "; }
-  .log { max-height: 300px; overflow-y: auto; font-family: Consolas, "Courier New", monospace; font-size: 12.5px; line-height: 1.9; background: #26241f; color: #d8d5cc; border-radius: 10px; padding: 12px 14px; }
-  .log .ok { color: #9fd6a4; } .log .skip { color: #8fb8ec; } .log .nosub { color: #e4b45e; } .log .fail { color: #eb8d80; } .log .info { color: #96938a; }
-  #summaryText { font-family: Consolas, "Courier New", monospace; font-size: 13px; line-height: 1.9; white-space: pre-wrap; margin: 0; }
-  .badge { display: inline-block; padding: 2px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-  .badge.b0 { background: #e2f2e4; color: var(--ok); }
-  .badge.b1 { background: #f9e4e0; color: var(--fail); }
-  .badge.b2 { background: #eeede9; color: var(--muted); }
-  .filebtn {
-    display: inline-flex; align-items: center; margin: 0 8px 8px 0; padding: 7px 13px; border: 1px solid var(--border-strong);
-    border-radius: 8px; background: #fcfcfb; cursor: pointer; font-size: 13px; font-family: inherit; color: var(--ink);
-    transition: all .15s;
-  }
-  .filebtn:hover { border-color: var(--accent); color: var(--accent); }
-  .filebtn.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
-  .tag { display: inline-block; margin-left: 7px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
-  .tag-ok { background: #e2f2e4; color: var(--ok); }
-  .tag-skip { background: #e3ecfa; color: var(--skip); }
-  .tag-fail { background: #f9e4e0; color: var(--fail); }
-  .tag-muted { background: #eeede9; color: var(--muted); }
-  .md { line-height: 1.9; font-size: 14.5px; }
-  .md h1 { font-size: 17px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-  .md p { margin: 0 0 12px; color: #3a3934; }
-  .md .wikilist { list-style: none; padding: 0; margin: 0 0 12px; }
-  .md .wikilist li { margin: 5px 0; }
-  .wikilink {
-    background: none; border: none; color: var(--accent); cursor: pointer; font-size: 14px;
-    font-family: inherit; padding: 0; text-decoration: underline; text-decoration-color: #cdc2f2; text-underline-offset: 3px;
-  }
-  .wikilink:hover { color: var(--accent-strong); }
-  .props { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 12.5px; }
-  .props td { border: 1px solid var(--border); padding: 5px 10px; }
-  .props td:first-child { width: 120px; background: #f8f7f4; color: var(--muted); font-family: Consolas, monospace; }
-  .mdraw { display: none; font-family: Consolas, monospace; font-size: 12.5px; white-space: pre-wrap; background: #f8f7f4; padding: 14px; border-radius: 8px; line-height: 1.8; }
-  #errorBox { display: none; background: #fdf0ee; border: 1px solid #f0d2cc; color: var(--fail); border-radius: 10px; padding: 12px 16px; font-size: 13px; line-height: 1.8; margin-top: 14px; }
-  .viewerhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-  .viewerhead .name { font-size: 12px; color: var(--muted); }
-  #fileProtoBanner { display: none; background: #fdf0ee; border-bottom: 1px solid #f0d2cc; color: var(--fail); padding: 10px 20px; font-size: 13px; line-height: 1.8; }
-  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 8px 0 30px; }
 
-  /* 目录选择器 */
-  .modal-mask { display: none; position: fixed; inset: 0; background: rgba(30, 27, 22, .38); z-index: 50; align-items: center; justify-content: center; }
-  .modal { width: min(520px, 92vw); max-height: 74vh; display: flex; flex-direction: column; background: var(--card); border-radius: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.22); overflow: hidden; }
-  .modal-head { padding: 14px 18px 10px; }
-  .modal-head h3 { margin: 0 0 6px; font-size: 14px; }
-  .modal-path { font-family: Consolas, monospace; font-size: 12px; color: var(--muted); word-break: break-all; min-height: 16px; }
-  .modal-list { flex: 1; overflow-y: auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px; min-height: 180px; }
+  /* ---------- busy / progress ---------- */
+  #busy { display: none; align-items: center; gap: 9px; color: var(--accent-strong); font-size: 13px; }
+  .spin { width: 14px; height: 14px; border-radius: 50%; flex: none;
+    border: 2px solid rgba(139, 92, 246, .25); border-top-color: var(--accent-strong);
+    animation: rot .8s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  #runbar { height: 2px; margin: -6px 0 14px; border-radius: 2px; overflow: hidden; background: rgba(255,255,255,.06);
+    opacity: 0; transition: opacity .3s; }
+  #runbar.on { opacity: 1; }
+  #runbar i { display: block; height: 100%; width: 34%; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent);
+    animation: sweep 1.4s ease-in-out infinite; }
+  @keyframes sweep { 0% { transform: translateX(-110%); } 100% { transform: translateX(420%); } }
+
+  .log { max-height: 320px; overflow-y: auto; font-family: "Geist Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 12.5px; line-height: 1.95; background: #0c0a16; color: #cdc9de;
+    border: 1px solid var(--line); border-radius: 12px; padding: 13px 16px; }
+  .log .ok { color: #7ee8a8; } .log .skip { color: #8fbdf2; } .log .nosub { color: #ecc46e; }
+  .log .fail { color: #f3978a; } .log .info { color: #837e9c; }
+
+  /* ---------- reactbits · CountUp stats ---------- */
+  #statsRow { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px; }
+  .stat { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,.03);
+    display: flex; flex-direction: column; gap: 3px; }
+  .stat-n { font-family: "Geist", "Noto Sans SC", sans-serif; font-size: 24px; font-weight: 800; line-height: 1;
+    font-variant-numeric: tabular-nums; }
+  .stat-l { font-size: 11px; color: var(--dim); letter-spacing: .08em; }
+  .st-ok .stat-n { color: var(--ok); } .st-skip .stat-n { color: var(--skip); }
+  .st-nosub .stat-n { color: var(--warn); } .st-fail .stat-n { color: var(--fail); }
+
+  #summaryText { font-family: "Geist Mono", Consolas, monospace; font-size: 13px; line-height: 1.9;
+    white-space: pre-wrap; margin: 0; color: #cdc9de; }
+  .badge { display: inline-block; padding: 3px 13px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    margin-left: 8px; vertical-align: 1px; }
+  .badge.b0 { background: rgba(74, 222, 128, .14); color: var(--ok); }
+  .badge.b1 { background: rgba(248, 113, 113, .14); color: var(--fail); }
+  .badge.b2 { background: rgba(255,255,255,.07); color: var(--muted); }
+
+  /* ---------- files / viewer ---------- */
+  /* ---------- reactbits · AnimatedList 文件条目交错入场 ---------- */
+  .filebtn {
+    display: inline-flex; align-items: center; margin: 0 8px 8px 0; padding: 8px 14px;
+    border: 1px solid rgba(255,255,255,.13); border-radius: 10px; background: rgba(255,255,255,.03);
+    cursor: pointer; font-size: 13px; font-family: inherit; color: var(--ink);
+    position: relative; overflow: hidden; transition: all .2s;
+    animation: fileIn .45s cubic-bezier(.2,.7,.3,1) both; animation-delay: var(--d, 0ms);
+  }
+  @keyframes fileIn { from { opacity: 0; transform: translateY(8px) scale(.97); } }
+  .filebtn::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.14) 50%, transparent 65%);
+    transform: translateX(-160%); transition: transform .6s ease; }
+  .filebtn:hover { border-color: rgba(139, 92, 246, .55); color: var(--accent-strong); }
+  .filebtn:hover::after { transform: translateX(160%); }
+  .filebtn.active { border-color: rgba(139, 92, 246, .65); background: var(--accent-soft); color: #d6c9fb; font-weight: 600; }
+  .tag { display: inline-block; margin-left: 7px; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .tag-ok { background: rgba(74, 222, 128, .14); color: var(--ok); }
+  .tag-skip { background: rgba(96, 165, 250, .14); color: var(--skip); }
+  .tag-fail { background: rgba(248, 113, 113, .14); color: var(--fail); }
+  .tag-muted { background: rgba(255,255,255,.07); color: var(--muted); }
+
+  .md { line-height: 2; font-size: 14.5px; color: #d9d5ea; }
+  .md h1 { font-size: 17.5px; border-bottom: 1px solid var(--line); padding-bottom: 9px; color: var(--ink); }
+  .md p { margin: 0 0 12px; }
+  .md .wikilist { list-style: none; padding: 0; margin: 0 0 12px; }
+  .md .wikilist li { margin: 6px 0; }
+  .wikilink {
+    background: none; border: none; color: var(--accent-strong); cursor: pointer; font-size: 14px;
+    font-family: inherit; padding: 0; text-decoration: underline;
+    text-decoration-color: rgba(167, 139, 250, .45); text-underline-offset: 4px; transition: color .2s;
+  }
+  .wikilink:hover { color: #c4b5fd; }
+  .props { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 12.5px; }
+  .props td { border: 1px solid var(--line); padding: 6px 11px; color: #cdc9de; }
+  .props td:first-child { width: 120px; background: rgba(255,255,255,.035); color: var(--muted);
+    font-family: "Geist Mono", Consolas, monospace; }
+  .mdraw { display: none; font-family: "Geist Mono", Consolas, monospace; font-size: 12.5px; white-space: pre-wrap;
+    background: rgba(255,255,255,.035); padding: 15px; border-radius: 10px; line-height: 1.85; border: 1px solid var(--line); }
+  #errorBox { display: none; background: rgba(248, 113, 113, .08); border: 1px solid rgba(248, 113, 113, .3);
+    color: #fca396; border-radius: 12px; padding: 12px 16px; font-size: 13px; line-height: 1.85; margin-top: 14px; }
+  .viewerhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .viewerhead .name { font-size: 12px; color: var(--dim); }
+  #auditText { white-space: pre-wrap; font-size: 13px; line-height: 1.95; margin: 0; color: #cdc9de; }
+
+  #fileProtoBanner { display: none; background: rgba(251, 191, 36, .08); border-bottom: 1px solid rgba(251, 191, 36, .28);
+    color: #fbd38d; padding: 11px 20px; font-size: 13px; line-height: 1.8; }
+  #fileProtoBanner b { color: #fde68a; }
+
+  footer { text-align: center; color: var(--dim); font-size: 12px; padding: 10px 0 34px; }
+
+  /* ---------- 状态圆点标记（替代 emoji） ---------- */
+  .mk { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 0; }
+  .mk-ok { background: var(--ok); box-shadow: 0 0 8px rgba(74,222,128,.7); }
+  .mk-warn { background: var(--warn); box-shadow: 0 0 8px rgba(251,191,36,.7); }
+  .mk-fail { background: var(--fail); box-shadow: 0 0 8px rgba(248,113,113,.7); }
+
+  /* ---------- modal ---------- */
+  .modal-mask { display: none; position: fixed; inset: 0; background: rgba(6, 5, 12, .66);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 50; align-items: center; justify-content: center; }
+  .modal { width: min(520px, 92vw); max-height: 74vh; display: flex; flex-direction: column;
+    background: #12101d; border: 1px solid var(--card-border); border-radius: 16px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.55); overflow: hidden; animation: fadeUp .3s cubic-bezier(.2,.7,.3,1); }
+  .modal-head { padding: 15px 18px 10px; }
+  .modal-head h3 { margin: 0 0 6px; font-size: 14.5px; }
+  .modal-path { font-family: "Geist Mono", Consolas, monospace; font-size: 12px; color: var(--dim); word-break: break-all; min-height: 16px; }
+  .modal-list { flex: 1; overflow-y: auto; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 6px; min-height: 180px; }
   .browse-row {
     display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: none; background: none;
-    padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13.5px; font-family: inherit; color: var(--ink);
+    padding: 9px 11px; border-radius: 9px; cursor: pointer; font-size: 13.5px; font-family: inherit; color: var(--ink);
+    transition: background .15s;
   }
   .browse-row:hover { background: var(--accent-soft); }
-  .browse-row svg { flex: none; color: var(--accent); }
-  .browse-loading { color: var(--muted); font-size: 13px; padding: 14px 10px; }
+  .browse-row svg { flex: none; color: var(--accent-strong); }
+  .browse-loading { color: var(--dim); font-size: 13px; padding: 14px 10px; }
   .modal-foot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
   .modal-foot .spacer { flex: 1; }
+
+  /* ---------- reactbits · ClickSpark ---------- */
+  .sparkhost { position: fixed; z-index: 99; width: 0; height: 0; pointer-events: none; }
+  .sparkhost i { position: absolute; left: -1.5px; top: -5px; width: 3px; height: 10px; border-radius: 2px;
+    background: linear-gradient(to top, var(--accent), #d8b4fe);
+    animation: fly .55s cubic-bezier(.2,.7,.3,1) forwards; }
+  @keyframes fly { from { transform: rotate(var(--ra)) translateY(-6px); opacity: 1; }
+    to { transform: rotate(var(--ra)) translateY(-26px); opacity: 0; } }
+
+  /* ---------- reduced motion: 全量降级 ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    .glow i, .dot.on, #runbar i, .spin, .primarybtn, .hero .caret { animation: none !important; }
+    .primarybtn { --sb: 90deg; }
+    .hero h1 span { animation: none; opacity: 1; filter: none; transform: none; }
+    .hero .sub, .topbar, .modal, .filebtn { animation: none; }
+    .hero .sub b { animation: none; }
+    html.js .reveal { opacity: 1; transform: none; transition: none; }
+    .card, .filebtn, .primarybtn { transition: none; }
+  }
+  @media (max-width: 640px) {
+    .modes { flex-direction: column; }
+    .brand-sub { display: none; }
+    .bento { grid-template-columns: minmax(0, 1fr); }
+    #progressCard, #summaryCard, #auditCard, #filesCard, #viewerCard { grid-column: auto; }
+  }
 </style>
 </head>
 <body>
+<div class="dotgrid" aria-hidden="true"></div>
+<div class="glow" aria-hidden="true"><i class="g1"></i><i class="g2"></i></div>
+<div class="grain" aria-hidden="true"></div>
+
 <div id="fileProtoBanner">
-  ⚠️ 你是直接打开的本地文件（file:// 协议）——这样页面能显示，但所有接口都不可用（Failed to fetch）。<br>
-  正确用法：先运行 <b>python web/server.py</b>，再在浏览器打开 <b>http://127.0.0.1:8765</b>。
+  你正在直接打开本地文件（file:// 协议）——页面能显示，但所有接口都不可用（Failed to fetch）。<br>
+  正确用法：先运行 <b>python web/server.py</b>（或双击「启动网页版.bat」），再在浏览器打开 <b>http://127.0.0.1:8765</b>。
 </div>
-<header>
-  <div class="wrap">
-    <div class="logo">字</div>
-    <div>
-      <h1>字幕提取器</h1>
-      <p>B站合集 / 播客字幕 → Obsidian 知识库笔记 · 本地运行，与命令行 subtitle-cli 同一套核心</p>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <div class="logo">字</div>
+      <div>
+        <div class="brand-name">字幕提取器</div>
+        <div class="brand-sub">SUBTITLE-CLI · LOCAL WEB UI</div>
+      </div>
     </div>
+    <div class="srv"><span class="dot" id="srvDot"></span><span id="srvText">检测本地服务…</span></div>
   </div>
 </header>
+
 <main>
-  <section class="card">
-    <h2><span class="bar"></span>提取设置</h2>
-    <div class="modes">
+  <section class="hero">
+    <p class="prompt" aria-hidden="true"><span>$</span> subtitle-cli <b>--ui</b><i class="caret"></i></p>
+    <h1 id="heroTitle">字幕提取器</h1>
+    <p class="sub">B站合集 / 播客 / 抖音的字幕，一键变成 <b>Obsidian 可双链的 Markdown 笔记</b>。本地运行，与命令行 subtitle-cli 同一套核心。</p>
+  </section>
+
+  <div class="layout">
+  <section class="card reveal console">
+    <h2>提取设置</h2>
+    <div class="modes seg">
       <label><input type="radio" name="mode" id="modeDemo" checked onchange="setMode()"> 离线演示（内置 Mock，无需 Cookie）</label>
       <label><input type="radio" name="mode" id="modeReal" onchange="setMode()"> 真实接口（需登录 Cookie）</label>
     </div>
@@ -152,7 +406,7 @@
       输入框已预填演示合集第 1 集的视频链接——粘贴合集里任意一个视频网址即可自动识别并爬取整个合集。
     </div>
     <div id="outputSection" hidden>
-      <div class="modes" style="margin-top:14px">
+      <div class="modes seg" style="margin-top:14px">
         <label><input type="radio" name="outmode" id="outVault" checked onchange="setOutMode()"> 写入 Obsidian vault（推荐）</label>
         <label><input type="radio" name="outmode" id="outFolder" onchange="setOutMode()"> 输出到普通文件夹</label>
       </div>
@@ -195,43 +449,49 @@
     <div class="row-btn">
       <button id="startBtn" class="primarybtn" onclick="start()">开始提取</button>
       <button id="previewBtn" class="ghostbtn" onclick="previewFirst()">预览第 1 集（审查排版与内容）</button>
-      <span id="busy">正在提取，全程串行 + 随机间隔…</span>
+      <span id="busy"><span class="spin" aria-hidden="true"></span><span id="busyText"></span></span>
     </div>
     <div id="errorBox"></div>
   </section>
 
-  <section class="card" id="progressCard" hidden>
-    <h2><span class="bar"></span>运行进度</h2>
+  <section class="bento">
+  <div class="standby" aria-hidden="true">等待任务——提取开始后，进度、汇总与产物会出现在这里</div>
+  <section class="card reveal" id="progressCard" hidden>
+    <h2>运行进度</h2>
+    <div id="runbar"><i></i></div>
     <div class="log" id="logBox"></div>
   </section>
 
-  <section class="card" id="summaryCard" hidden>
-    <h2><span class="bar"></span>结果汇总 <span id="exitBadge"></span></h2>
+  <section class="card reveal" id="summaryCard" hidden>
+    <h2>结果汇总 <span id="exitBadge"></span></h2>
+    <div id="statsRow" hidden></div>
     <pre id="summaryText"></pre>
-    <div class="row-btn" style="margin-top:10px">
-      <button id="openObsidian" class="primarybtn" style="display:none; font-size:13px; padding:8px 20px" onclick="openInObsidian()">在 Obsidian 中打开合集索引</button>
+    <div class="row-btn" style="margin-top:12px">
+      <button id="openObsidian" class="primarybtn sm" style="display:none" onclick="openInObsidian()">在 Obsidian 中打开合集索引</button>
     </div>
   </section>
 
-  <section class="card" id="auditCard" hidden>
-    <h2><span class="bar"></span>审查报告（提取前预览）</h2>
-    <pre id="auditText" style="white-space:pre-wrap;font-size:13px;line-height:1.9;margin:0"></pre>
+  <section class="card reveal" id="auditCard" hidden>
+    <h2>审查报告（提取前预览）</h2>
+    <pre id="auditText"></pre>
   </section>
 
-  <section class="card" id="filesCard" hidden>
-    <h2><span class="bar"></span>生成的文件</h2>
+  <section class="card reveal" id="filesCard" hidden>
+    <h2>生成的文件</h2>
     <div id="fileList"></div>
   </section>
 
-  <section class="card" id="viewerCard" hidden>
+  <section class="card reveal" id="viewerCard" hidden>
     <div class="viewerhead">
-      <h2 style="margin:0" id="viewerTitle"><span class="bar"></span>预览</h2>
+      <h2 style="margin:0" id="viewerTitle">预览</h2>
       <button class="ghostbtn" id="rawToggle" onclick="toggleRaw()">查看原文</button>
     </div>
-    <span class="name" id="viewerName" style="font-size:12px;color:var(--muted)"></span>
+    <span class="name" id="viewerName" style="font-size:12px;color:var(--dim)"></span>
     <div class="md" id="mdView"></div>
     <pre class="mdraw" id="rawView"></pre>
   </section>
+  </section>
+  </div>
 </main>
 <footer>仅供个人学习使用 · 字幕内容归创作者/平台所有</footer>
 
@@ -247,7 +507,7 @@
       <button class="ghostbtn" id="browseUp" onclick="browseParent()">返回上级</button>
       <span class="spacer"></span>
       <button class="ghostbtn" onclick="closeBrowse()">取消</button>
-      <button class="primarybtn" id="browseSelect" style="padding:8px 18px; font-size:13px" onclick="chooseBrowse()">选择此文件夹</button>
+      <button class="primarybtn sm" id="browseSelect" onclick="chooseBrowse()">选择此文件夹</button>
     </div>
   </div>
 </div>
@@ -299,7 +559,7 @@ async function postJSON(url, body) {
   } catch (e) {
     throw new Error(
       "无法连接本地服务。最常见原因：端口上有旧的 server.py 残留进程。" +
-        "请关闭所有 server.py 窗口后重新运行 python web/server.py，" +
+        "请关闭所有 server.py 窗口后重新运行 启动网页版.bat（或 python web/server.py），" +
         "并用系统浏览器（Edge/Chrome）打开 http://127.0.0.1:8765"
     );
   }
@@ -344,6 +604,11 @@ function kindOf(line) {
   if (line.includes("已存在") || line.includes("跳过")) return "skip";
   if (line.includes("已写入") || line.includes("成功")) return "ok";
   return "info";
+}
+
+// 状态圆点标记（替代 emoji 前缀）
+function mark(kind, text) {
+  return `<span class="mk mk-${kind}"></span>${esc(text)}`;
 }
 
 function wikilinkButton(stem, alias) {
@@ -400,6 +665,7 @@ function resetPanels() {
   $("summaryCard").hidden = true;
   $("filesCard").hidden = true;
   $("viewerCard").hidden = true;
+  $("statsRow").hidden = true;
   $("errorBox").style.display = "none";
   $("errorBox").textContent = "";
   $("exitBadge").textContent = "";
@@ -414,8 +680,8 @@ function showError(msg) {
 }
 
 function setBusy(text) {
-  $("busy").textContent = text;
-  $("busy").style.display = text ? "inline" : "none";
+  $("busyText").textContent = text;
+  $("busy").style.display = text ? "inline-flex" : "none";
 }
 
 // ---- vault 配置 ----
@@ -447,9 +713,9 @@ async function checkCookie() {
   try {
     const resp = await postJSON("/api/check-cookie", { cookie: raw });
     const j = await resp.json();
-    box.textContent = (j.ok ? "✅ " : "❌ ") + j.message;
+    box.innerHTML = mark(j.ok ? "ok" : "fail", j.message);
   } catch (e) {
-    box.textContent = "❌ " + e.message;
+    box.innerHTML = mark("fail", e.message);
   }
 }
 
@@ -461,12 +727,12 @@ async function checkVault(create) {
   try {
     const resp = await postJSON("/api/check-vault", { path: p, create });
     const j = await resp.json();
-    const icon = !j.ok ? "❌ " : (j.is_vault_root ? "✅ " : "⚠️ ");
-    box.textContent = icon + j.message;
+    const kind = !j.ok ? "fail" : (j.is_vault_root ? "ok" : "warn");
+    box.innerHTML = mark(kind, j.message);
     $("createVaultBtn").style.display = (!j.ok && j.can_create) ? "inline-block" : "none";
     if (j.ok) saveVaultConfig();
   } catch (e) {
-    box.textContent = "❌ " + e.message;
+    box.innerHTML = mark("fail", e.message);
   }
 }
 
@@ -571,7 +837,7 @@ async function previewFirst() {
     $("auditCard").hidden = false;
     $("auditText").textContent = j.format_report;
     if (j.logged_in === false) {
-      showError("⚠️ 当前未登录：B站不向未登录请求返回字幕列表，无法预览内容。请检查 Cookie。");
+      showError("当前未登录：B站不向未登录请求返回字幕列表，无法预览内容。请检查 Cookie。");
     } else if (!j.markdown) {
       showError("第 1 集没有可用字幕，无法预览内容；其余分集可尝试批量提取。");
     } else {
@@ -623,10 +889,11 @@ async function poll() {
   } catch (e) {
     // 服务失联：多失败几次后给出提示（避免 spinner 永远无声地转）
     if (++pollFailures === 15) {
-      setBusy("⚠️ 与本地服务失去联系，请检查 server.py 窗口是否被关闭或端口被占用");
+      setBusy("与本地服务失去联系，请检查 server.py 窗口是否被关闭或端口被占用");
     }
     return;
   }
+  $("runbar").classList.toggle("on", !!s.running);
   const box = $("logBox");
   box.innerHTML = s.log
     .map((item) => `<div class="${kindOf(item.line)}">${esc(item.line)}</div>`)
@@ -647,6 +914,7 @@ async function poll() {
     const b = $("exitBadge");
     b.className = "badge b" + (s.exit_code === 0 ? 0 : s.exit_code === 1 ? 1 : 2);
     b.textContent = "退出码 " + s.exit_code;
+    renderStats(s.log, s.summary);
   }
   if (s.obsidian_open) {
     obsidianUri = s.obsidian_open;
@@ -658,11 +926,66 @@ async function poll() {
     $("fileList").innerHTML = s.files
       .map((f, i) => {
         const name = esc(f.name).replace(/'/g, "&#39;");
-        return `<button class="filebtn${i === 0 ? " active" : ""}" onclick="openFile(this, '${name}')">${esc(f.name)}<span class="tag ${tagClass(f.badge)}">${esc(f.badge)}</span></button>`;
+        return `<button class="filebtn${i === 0 ? " active" : ""}" style="--d:${i * 70}ms" onclick="openFile(this, '${name}')">${esc(f.name)}<span class="tag ${tagClass(f.badge)}">${esc(f.badge)}</span></button>`;
       })
       .join("");
     openFile($("fileList").firstChild, s.files[0].name);
   }
+}
+
+// ---- reactbits · CountUp 统计 ----
+
+// 优先从汇总文本精确解析（日志行里「未登录…无字幕」这类提示会干扰逐行计数）
+function statCountsFromSummary(summary) {
+  if (!summary) return null;
+  const okM = summary.match(/成功\s+(\d+)（其中增量跳过\s+(\d+)/);
+  if (!okM) return null;
+  const nosubM = summary.match(/无字幕\s+(\d+)/);
+  const failM = summary.match(/失败\s+(\d+)/);
+  const total = parseInt(okM[1], 10);
+  const skipped = parseInt(okM[2], 10);
+  return {
+    ok: Math.max(0, total - skipped),
+    skip: skipped,
+    nosub: nosubM ? parseInt(nosubM[1], 10) : 0,
+    fail: failM ? parseInt(failM[1], 10) : 0,
+  };
+}
+
+function statCounts(logLines) {
+  const c = { ok: 0, skip: 0, nosub: 0, fail: 0 };
+  for (const item of logLines || []) {
+    const k = kindOf(item.line);
+    if (k in c) c[k]++;
+  }
+  return c;
+}
+
+function countUp(el, to, delay) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches || !to) { el.textContent = to; return; }
+  const t0 = performance.now() + delay;
+  const dur = 700;
+  const tick = (t) => {
+    const p = Math.min(1, Math.max(0, (t - t0) / dur));
+    el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function renderStats(logLines, summary) {
+  const row = $("statsRow");
+  const c = statCountsFromSummary(summary) || statCounts(logLines);
+  if (!(logLines || []).length) { row.hidden = true; return; }
+  const tiles = [
+    ["成功写入", c.ok, "st-ok"], ["增量跳过", c.skip, "st-skip"],
+    ["无字幕", c.nosub, "st-nosub"], ["失败", c.fail, "st-fail"],
+  ];
+  row.innerHTML = tiles
+    .map(([label, n, cls]) => `<div class="stat ${cls}"><span class="stat-n" data-n="${n}">0</span><span class="stat-l">${label}</span></div>`)
+    .join("");
+  row.hidden = false;
+  row.querySelectorAll(".stat-n").forEach((el, i) => countUp(el, parseInt(el.dataset.n, 10), 120 + i * 100));
 }
 
 function openInObsidian() {
@@ -719,6 +1042,98 @@ if (location.protocol === "file:") $("fileProtoBanner").style.display = "block";
 setMode();
 setOutMode();
 loadConfig();
+
+/* ==== 视觉增强（reactbits 风格，全部可失败降级）==== */
+try {
+  document.documentElement.classList.add("js");
+
+  // 服务状态灯：启动器的 /api/health 探活在页面里的延伸
+  async function pingHealth() {
+    const dot = $("srvDot"), txt = $("srvText");
+    try {
+      const j = await (await fetch("/api/health")).json();
+      const on = j && j.ok && j.app === "subtitle-cli";
+      dot.className = "dot " + (on ? "on" : "off");
+      txt.textContent = on ? "本地服务已连接" : "服务异常";
+    } catch (e) {
+      dot.className = "dot off";
+      txt.textContent = "本地服务未连接";
+    }
+  }
+  pingHealth();
+  setInterval(pingHealth, 20000);
+
+  // BlurText：标题逐字模糊入场
+  (function blurTitle() {
+    const el = $("heroTitle");
+    const text = el.textContent.trim();
+    el.setAttribute("aria-label", text);
+    el.textContent = "";
+    [...text].forEach((ch, i) => {
+      const s = document.createElement("span");
+      s.textContent = ch;
+      s.style.setProperty("--i", i);
+      s.setAttribute("aria-hidden", "true");
+      el.appendChild(s);
+    });
+  })();
+
+  // SpotlightCard：卡片聚光跟随指针
+  document.querySelectorAll(".card").forEach((card) => {
+    card.addEventListener("pointermove", (e) => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty("--mx", (e.clientX - r.left) + "px");
+      card.style.setProperty("--my", (e.clientY - r.top) + "px");
+    });
+  });
+
+  // Magnet：主按钮轻微磁吸
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!reduced) {
+    document.querySelectorAll(".primarybtn").forEach((btn) => {
+      btn.addEventListener("pointermove", (e) => {
+        const r = btn.getBoundingClientRect();
+        const dx = (e.clientX - r.left - r.width / 2) / r.width;
+        const dy = (e.clientY - r.top - r.height / 2) / r.height;
+        btn.style.setProperty("--magx", (dx * 4) + "px");
+        btn.style.setProperty("--magy", (dy * 3) + "px");
+      });
+      btn.addEventListener("pointerleave", () => {
+        btn.style.setProperty("--magx", "0px");
+        btn.style.setProperty("--magy", "0px");
+      });
+    });
+  }
+
+  // ClickSpark：主按钮点击迸发
+  if (!reduced) {
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".primarybtn")) return;
+      const host = document.createElement("div");
+      host.className = "sparkhost";
+      host.style.left = e.clientX + "px";
+      host.style.top = e.clientY + "px";
+      for (let i = 0; i < 8; i++) {
+        const s = document.createElement("i");
+        s.style.setProperty("--ra", i * 45 + "deg");
+        host.appendChild(s);
+      }
+      document.body.appendChild(host);
+      setTimeout(() => host.remove(), 650);
+    });
+  }
+
+  // 滚动显现 + 兜底（即使增强逻辑出错，1.6s 后强制全部可见）
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((en) => {
+      if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); }
+    });
+  }, { threshold: 0.08 });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+  setTimeout(() => document.querySelectorAll(".reveal").forEach((el) => el.classList.add("in")), 1600);
+} catch (e) {
+  document.querySelectorAll(".reveal").forEach((el) => el.classList.add("in"));
+}
 </script>
 </body>
 </html>
