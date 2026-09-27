@@ -251,8 +251,14 @@ def test_browse_api(tmp_path: Path):
         status, text = _get(base, "/api/browse?path=")
         assert status == 200
         drives = json.loads(text)
-        assert drives["current"] == "" and drives["parent"] is None
-        assert drives["dirs"] and all("name" in d and "path" in d for d in drives["dirs"])
+        if os.name == "nt":
+            # Windows：空路径 = 「此电脑」盘符列表
+            assert drives["current"] == "" and drives["parent"] is None
+            assert drives["dirs"] and all("name" in d and "path" in d for d in drives["dirs"])
+        else:
+            # 其他系统没有盘符概念：空路径直接列根目录
+            assert drives["current"] and drives["parent"] == ""
+            assert drives["dirs"] and all("name" in d and "path" in d for d in drives["dirs"])
 
         status, text = _get(
             base, "/api/browse?path=" + urllib.parse.quote(str(REPO_ROOT))
@@ -262,10 +268,11 @@ def test_browse_api(tmp_path: Path):
         assert {"docs", "src", "web", "tests"} <= {d["name"] for d in repo["dirs"]}
         assert repo["parent"]
 
-        # 盘符根目录：上级为空串（回到「此电脑」），而非 None
-        status, text = _get(base, "/api/browse?path=" + urllib.parse.quote("C:/"))
-        root = json.loads(text)
-        assert status == 200 and root["parent"] == ""
+        if os.name == "nt":
+            # 盘符根目录：上级为空串（回到「此电脑」），而非 None
+            status, text = _get(base, "/api/browse?path=" + urllib.parse.quote("C:/"))
+            root = json.loads(text)
+            assert status == 200 and root["parent"] == ""
 
         try:
             _get(base, "/api/browse?path=" + urllib.parse.quote(str(tmp_path / "nope")))

@@ -359,11 +359,11 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/config":
             self._json(load_config().model_dump())
         elif path == "/api/browse":
-            # 目录浏览：path 为空返回盘符列表（Windows），否则返回该目录下的子文件夹。
-            # 本地个人工具，配合网页「浏览…」按钮代替手动输入路径
+            # 目录浏览：path 为空时 Windows 返回盘符列表（「此电脑」），
+            # 其他系统没有盘符概念，直接列根目录
             q = parse_qs(urlparse(self.path).query)
             raw = (q.get("path") or [""])[0].strip()
-            if not raw:
+            if not raw and os.name == "nt":
                 import string
 
                 drives = [
@@ -373,6 +373,8 @@ class Handler(BaseHTTPRequestHandler):
                 ]
                 self._json({"current": "", "parent": None, "dirs": drives})
                 return
+            if not raw:
+                raw = "/"
             target = Path(raw).expanduser()
             if not target.is_dir():
                 self._json({"error": f"目录不存在：{raw}"}, 400)
