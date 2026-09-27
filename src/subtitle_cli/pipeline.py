@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Callable, Literal, Protocol
+from typing import Literal, Protocol
+from collections.abc import Callable
 
 from pydantic import BaseModel
 
@@ -303,7 +304,7 @@ def _asr_fallback(
     """
     label = f"EP{episode.index:02d}"
     log(f"{label} 无字幕，转本地语音转写（模型 {asr_model}，可能较慢）…")
-    download = getattr(client, "download_audio")
+    download = client.download_audio
     audio_path = state.audio_cache_path(episode)
     if cache and storage.is_downloaded(audio_path):
         log(f"{label} 音频命中缓存（{audio_path.stat().st_size // 1024} KB），跳过下载")

@@ -12,7 +12,7 @@ import random
 import re
 import time
 from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 import httpx
 
@@ -77,7 +77,7 @@ class PodcastClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> "PodcastClient":
+    def __enter__(self) -> PodcastClient:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
@@ -207,7 +207,7 @@ class PodcastClient:
         self, url: str, *, params: dict | None = None, delay_range: tuple[float, float]
     ) -> httpx.Response:
         last_error: Exception | None = None
-        for attempt in range(2):
+        for _attempt in range(2):
             self._sleep(self._rng.uniform(*delay_range))
             try:
                 resp = self._http.get(url, params=params)

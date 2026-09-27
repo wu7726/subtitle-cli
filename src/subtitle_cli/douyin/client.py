@@ -12,12 +12,12 @@ import re
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 import httpx
 
 from .. import config
-from ..bilibili.models import Episode, SubtitleTrack
+from ..bilibili.models import Episode
 from ..errors import PlatformError
 
 API_DETAIL_URL = "https://www.douyin.com/aweme/v1/web/aweme/detail/"
@@ -85,7 +85,7 @@ class DouyinClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> "DouyinClient":
+    def __enter__(self) -> DouyinClient:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

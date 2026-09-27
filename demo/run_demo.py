@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """离线 Demo：一键跑通 subtitle-cli 全流程（无需 Cookie、无需真实网络）。
 
 原理：在本机起一个临时 Mock 服务，回放B站接口的响应结构（与 tests/fixtures
@@ -159,7 +158,7 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(data)
 
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             base = f"http://127.0.0.1:{self.server.server_address[1]}"
             url = urlparse(self.path)
             q = parse_qs(url.query)

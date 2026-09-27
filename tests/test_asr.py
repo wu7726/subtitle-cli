@@ -31,7 +31,7 @@ def test_dependency_missing_gives_install_hint(monkeypatch):
 
 def test_segment_lines_maps_tuples():
     lines = segment_lines([(0.0, 1.5, " 第一句。"), (2.0, 3.0, "  "), (3.5, 4.0, "第二句。")])
-    assert [(l.from_time, l.to_time, l.content) for l in lines] == [
+    assert [(line.from_time, line.to_time, line.content) for line in lines] == [
         (0.0, 1.5, "第一句。"),
         (3.5, 4.0, "第二句。"),
     ]
@@ -46,7 +46,7 @@ def test_transcribe_maps_segments_and_logs(tmp_path):
         language="zh",
     )
     lines = transcribe_audio(audio, model=model, log=logs.append)
-    assert [l.content for l in lines] == ["你好。", "世界。"]
+    assert [line.content for line in lines] == ["你好。", "世界。"]
     assert lines[0].from_time == 0.0 and lines[1].to_time == 3.0
     assert any("识别语言：zh" in line for line in logs)
 

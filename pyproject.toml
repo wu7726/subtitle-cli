@@ -27,6 +27,19 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/subtitle_cli"]
 
+[tool.ruff]
+target-version = "py310"
+extend-exclude = ["demo_output", "output"]
+
+[tool.ruff.lint]
+# 中等档：默认规则（E4/E7/E9/F）+ bugbear + 裸异常 + RUF + 过时语法。
+# 不开 import 排序（I）与格式化——不动现有代码风格
+select = ["E4", "E7", "E9", "F", "B", "BLE", "RUF", "UP"]
+ignore = [
+    "RUF001", "RUF002", "RUF003", # 全中文注释/字符串：全角标点是正常用法，不是歧义字符
+    "B008",  # typer 的 Option/Argument 写在参数默认值里是框架惯用法
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # 集成测试（真实网络请求）默认排除，仅 pytest -m integration 或显式覆盖时运行

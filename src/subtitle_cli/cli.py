@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -17,8 +16,6 @@ from .asr import AsrDependencyError
 from .bilibili.client import RiskControlError, resolve_bilibili_cookie
 from .dispatch import (
     BILIBILI,
-    DOUYIN,
-    PODCAST,
     create_client,
     detect_platform,
     platform_subdir,
@@ -58,24 +55,24 @@ def main(
         help="B站：合集页 URL（含 sid= 或 season_id=）、合集内任一视频的 URL 或 BV 号、纯数字 season_id；"
         "播客：RSS 地址或 Apple Podcasts 节目链接；抖音：分享口令（含 v.douyin.com 短链）或视频页链接",
     ),
-    output: Optional[Path] = typer.Option(
+    output: Path | None = typer.Option(
         None,
         "--output",
         "-o",
         help="输出到普通文件夹（默认当前目录）；显式指定时优先于 vault",
     ),
-    vault: Optional[str] = typer.Option(
+    vault: str | None = typer.Option(
         None,
         "--vault",
         help="Obsidian vault 根目录：笔记写入 <vault>/<字幕文件夹>/<合集名>/；"
         "传入即记住（下次可省略）",
     ),
-    vault_subdir: Optional[str] = typer.Option(
+    vault_subdir: str | None = typer.Option(
         None,
         "--vault-subdir",
         help="vault 内字幕文件夹（默认 B站字幕，可嵌套；播客默认 播客字幕，抖音默认 抖音字幕）",
     ),
-    cookie: Optional[str] = typer.Option(
+    cookie: str | None = typer.Option(
         None,
         "--cookie",
         help="B站 Cookie（至少含 SESSDATA，AI 字幕需要登录态）；也可用 BILI_COOKIE 环境变量。播客输入不需要 Cookie",
@@ -98,7 +95,7 @@ def main(
         help=f"语音转写模型：{'/'.join(config.ASR_MODEL_CHOICES)}（越大越准越慢，"
         f"默认 {config.ASR_MODEL_SIZE}；回退到 CPU 时建议改 small）",
     ),
-    asr_limit: Optional[int] = typer.Option(
+    asr_limit: int | None = typer.Option(
         None,
         "--asr-limit",
         help="本次最多转写多少集（默认不限；无字幕分集很多时建议限制）",

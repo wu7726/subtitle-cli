@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import random
-from typing import Callable
+from collections.abc import Callable
 
 import httpx
 import pytest
@@ -65,7 +65,7 @@ class ClientHarness:
             now=lambda: NOW,
         )
 
-    def __enter__(self) -> "ClientHarness":
+    def __enter__(self) -> ClientHarness:
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -268,7 +268,7 @@ def test_retry_on_http_412_then_success():
         return httpx.Response(200, json={"code": 0, "data": {"archives": [], "page": {"total": 0}}})
 
     with ClientHarness(handler) as h:
-        name, episodes = h.client.list_episodes("123")
+        _name, episodes = h.client.list_episodes("123")
 
     assert calls["n"] == 3  # 初始 1 次 + 重试 2 次
     assert episodes == []

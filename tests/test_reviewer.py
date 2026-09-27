@@ -19,7 +19,7 @@ def test_clean_removes_filler_lines():
         line("接下来看代码。"),
     ]
     cleaned, stats = clean_lines(lines)
-    assert [l.content for l in cleaned] == ["大家好，今天讲第一章。", "接下来看代码。"]
+    assert [line.content for line in cleaned] == ["大家好，今天讲第一章。", "接下来看代码。"]
     assert stats.removed_fillers == 3
     assert stats.total_out == 2
 
@@ -32,7 +32,7 @@ def test_clean_strips_inline_markers_but_keeps_text():
 def test_clean_merges_consecutive_duplicates():
     lines = [line("对的对的"), line("对的对的"), line("对的对的"), line("下一句")]
     cleaned, stats = clean_lines(lines)
-    assert [l.content for l in cleaned] == ["对的对的", "下一句"]
+    assert [line.content for line in cleaned] == ["对的对的", "下一句"]
     assert stats.merged_duplicates == 2
 
 

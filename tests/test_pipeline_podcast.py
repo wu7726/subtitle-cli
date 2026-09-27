@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 
 from subtitle_cli import notes
 from subtitle_cli.bilibili.models import Episode, EpisodeStatus, SubtitleLine, SubtitleTrack

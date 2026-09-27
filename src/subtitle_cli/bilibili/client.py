@@ -11,7 +11,7 @@ import random
 import re
 import time
 from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 import httpx
 
@@ -127,7 +127,7 @@ class BilibiliClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> "BilibiliClient":
+    def __enter__(self) -> BilibiliClient:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
@@ -475,7 +475,7 @@ class BilibiliClient:
         return [SubtitleLine.model_validate(item) for item in body]
 
 
-def _choose_track(subtitles):  # noqa: ANN001 - list[SubtitleItem]
+def _choose_track(subtitles):
     """选轨：zh-CN > ai-zh > 第一个（技术方案 §6 第 4 步）。"""
     for want in ("zh-CN", "ai-zh"):
         for item in subtitles:

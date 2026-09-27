@@ -61,7 +61,7 @@ def test_resolve_input_variants():
         assert client.resolve_input(VID) == VID
         # 分享口令：文字 + 短链，302 落到视频页
         assert (
-            client.resolve_input(f"7.42 复制打开抖音 https://v.douyin.com/iAbCdEf/ 看视频")
+            client.resolve_input("7.42 复制打开抖音 https://v.douyin.com/iAbCdEf/ 看视频")
             == VID
         )
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """本地网页界面：在浏览器里运行字幕提取/迁移并查看生成的 Markdown。
 
     python web/server.py            # 默认 http://127.0.0.1:8765，自动打开浏览器
@@ -344,7 +343,7 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, payload: dict, status: int = 200) -> None:
         self._send(status, "application/json; charset=utf-8", json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if not self._access_allowed(post=False):
             return
         path = urlparse(self.path).path
@@ -414,7 +413,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._json({"error": "not found"}, 404)
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         if not self._access_allowed(post=True):
             return
         path = urlparse(self.path).path

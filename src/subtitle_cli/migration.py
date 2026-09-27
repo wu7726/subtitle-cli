@@ -12,7 +12,8 @@ from __future__ import annotations
 import re
 from datetime import date
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Literal
+from collections.abc import Callable
 
 from pydantic import BaseModel
 

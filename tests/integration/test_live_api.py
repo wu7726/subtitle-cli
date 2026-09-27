@@ -45,7 +45,6 @@ def test_live_list_episodes_and_cid():
 @needs_cookie
 def test_live_fetch_subtitles_with_cookie():
     """登录态下至少应拿到一集字幕（CC 或 AI），并解析出非空行。"""
-    from subtitle_cli.bilibili.models import Episode
 
     with BilibiliClient(cookie=os.environ["BILI_COOKIE"]) as client:
         _, episodes = client.list_episodes(client.resolve_input(SEASON_INPUT))

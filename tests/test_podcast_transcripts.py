@@ -34,20 +34,20 @@ def test_parse_vtt_fixture():
 
 def test_parse_vtt_empty_between_cues_kept_out():
     lines = transcripts.parse_vtt("WEBVTT\n\n00:00.000 --> 00:01.000\nonly line\n")
-    assert [l.content for l in lines] == ["only line"]
+    assert [line.content for line in lines] == ["only line"]
 
 
 # ---- SRT ----
 def test_parse_srt_fixture():
     lines = transcripts.parse_srt(_text("podcast_transcript.srt"))
-    assert [(l.from_time, l.to_time) for l in lines] == [(1.0, 3.0), (3.5, 6.0)]
+    assert [(line.from_time, line.to_time) for line in lines] == [(1.0, 3.0), (3.5, 6.0)]
     assert lines[1].content == "Today we talk about transcripts."
 
 
 # ---- JSON ----
 def test_parse_json_segments_fixture():
     lines = transcripts.parse_json_transcript(_text("podcast_transcript.json"))
-    assert [(l.from_time, l.to_time, l.content) for l in lines] == [
+    assert [(line.from_time, line.to_time, line.content) for line in lines] == [
         (0.0, 2.0, "第一句测试内容。"),
         (3.5, 5.0, "第二句测试内容。"),
     ]
@@ -66,13 +66,13 @@ def test_parse_json_invalid_returns_empty():
 # ---- 纯文本与 HTML ----
 def test_parse_plain_uniform_fake_timeline():
     lines = transcripts.parse_plain("第一行\n\n第二行")
-    assert [(l.from_time, l.content) for l in lines] == [(0.0, "第一行"), (2.0, "第二行")]
+    assert [(line.from_time, line.content) for line in lines] == [(0.0, "第一行"), (2.0, "第二行")]
 
 
 def test_parse_transcript_html_strips_tags():
     html = "<div><p>第一段。</p><p>第二段。</p></div>"
     lines = transcripts.parse_transcript(html, "text/html")
-    assert [l.content for l in lines] == ["第一段。", "第二段。"]
+    assert [line.content for line in lines] == ["第一段。", "第二段。"]
 
 
 # ---- MIME 分派与嗅探 ----
@@ -89,7 +89,7 @@ def test_dispatch_by_mime_and_sniffing():
 def test_sniff_json_and_plain():
     assert len(transcripts.parse_transcript(_text("podcast_transcript.json"), "")) == 2
     lines = transcripts.parse_transcript("一行\n二行", "weird")
-    assert [l.content for l in lines] == ["一行", "二行"]
+    assert [line.content for line in lines] == ["一行", "二行"]
 
 
 @pytest.mark.parametrize("mime", ["text/vtt", "application/srt", "application/json", "text/plain"])

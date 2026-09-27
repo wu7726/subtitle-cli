@@ -15,7 +15,7 @@ from subtitle_cli.migration import (
     migrate,
     scan_collections,
 )
-from subtitle_cli.vault import VaultConfig, load_config, save_config
+from subtitle_cli.vault import VaultConfig, load_config
 
 runner = CliRunner()
 FIXED_DATE = date(2026, 1, 2)

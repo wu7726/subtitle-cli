@@ -7,7 +7,6 @@ Typer 失去「单命令特判」，`subtitle-cli <来源>` 就得改口成
 
 from __future__ import annotations
 
-from typing import Optional
 
 import typer
 
@@ -64,7 +63,7 @@ def _counts(episodes) -> list[str]:
 
 @app.command()
 def main(
-    collection: Optional[str] = typer.Argument(
+    collection: str | None = typer.Argument(
         None, help="只看名字或 ID 含该关键词的合集（省略 = 最近一次运行）"
     ),
     all_: bool = typer.Option(False, "--all", help="列出全部合集的记录"),

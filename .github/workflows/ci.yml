@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    # 集成测试（SUBTITLE_CLI_INTEGRATION=1，需真实网络与 Cookie）不进 CI，本地手动跑
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: 同步依赖（按 uv.lock 锁定版本）
+        run: uv sync --extra dev
+
+      - name: Lint（ruff）
+        run: uv run ruff check .
+
+      - name: 测试 + 覆盖率
+        run: uv run pytest -q --cov=subtitle_cli --cov-report=term-missing --cov-report=json
+
+      - name: 覆盖率摘要（仅 3.13 报一次）
+        if: matrix.python-version == '3.13'
+        run: |
+          PCT=$(uv run python -c "import json;print(json.load(open('coverage.json'))['totals']['percent_covered_display'])")
+          echo "Coverage: **${PCT}%**" >> "$GITHUB_STEP_SUMMARY"

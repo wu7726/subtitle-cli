@@ -13,7 +13,6 @@ from pathlib import Path
 from subtitle_cli import state
 from subtitle_cli.bilibili.client import BilibiliError, RiskControlError
 from subtitle_cli.bilibili.models import Episode, EpisodeStatus
-from subtitle_cli.config import RISK_ABORT_THRESHOLD
 from subtitle_cli.pipeline import run_collection, summarize
 
 from tests.test_pipeline import FakeClient, make_episodes, track_of

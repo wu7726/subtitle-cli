@@ -1,5 +1,7 @@
 # subtitle-cli —— B站合集 / 播客 / 抖音字幕提取器
 
+[![CI](https://github.com/wu7726/subtitle-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/wu7726/subtitle-cli/actions/workflows/ci.yml)
+
 输入一个B站合集链接（或合集里任意一个视频链接），一次性提取该合集**全部分集**的字幕（CC 字幕 + AI 字幕）；或输入一个**播客 RSS 地址 / Apple Podcasts 节目链接**，提取各单集的现成文稿；或输入一个**抖音分享口令/视频链接**，下载音频本地转写出正文。输出为可直接阅读的 Markdown 笔记，**直接写入 Obsidian vault**，形成可搜索、可双链跳转的知识库。适合看完合集后做笔记、喂给 AI 总结、离线阅读。
 
 > 定位：个人学习用途的轻量命令行工具，仅供个人使用。PRD 见 `PRD.md`。
@@ -203,6 +205,9 @@ pip install -e ".[dev]"
 
 # 单元测试（不依赖网络，默认排除集成测试）
 pytest
+
+# Lint 检查（CI 同款规则；规则集中在 pyproject.toml 的 [tool.ruff.lint]）
+ruff check .
 
 # 集成测试（真实调用B站接口，手动开启）
 SUBTITLE_CLI_INTEGRATION=1 pytest -m integration

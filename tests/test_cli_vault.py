@@ -19,7 +19,7 @@ class FakeNetClient:
     def __init__(self, cookie: str | None = None):
         self.cookie = cookie
 
-    def __enter__(self) -> "FakeNetClient":
+    def __enter__(self) -> FakeNetClient:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

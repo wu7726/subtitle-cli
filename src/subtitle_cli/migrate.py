@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -24,17 +23,17 @@ def main(
         ...,
         help="旧字幕根目录：其下每个含 .md 的子文件夹视作一个合集",
     ),
-    vault: Optional[str] = typer.Option(
+    vault: str | None = typer.Option(
         None,
         "--vault",
         help="Obsidian vault 根目录（传入即记住）",
     ),
-    vault_subdir: Optional[str] = typer.Option(
+    vault_subdir: str | None = typer.Option(
         None,
         "--vault-subdir",
         help="vault 内字幕文件夹（默认 B站字幕，可嵌套）",
     ),
-    collections: Optional[str] = typer.Option(
+    collections: str | None = typer.Option(
         None,
         "--collections",
         help="逗号分隔的合集名，仅迁移这些；缺省迁移全部",
