@@ -301,6 +301,39 @@ def run_migrate_job(
 
 
 class Handler(BaseHTTPRequestHandler):
+    _LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
+
+    def _access_allowed(self, *, post: bool) -> bool:
+        """回环门禁：Host 必须是本机回环 + 本服务端口（防 DNS rebinding，
+        rebinding 请求的 Host 是攻击者域名）；POST 额外校验 Origin/Referer
+        同源（防恶意网页跨站表单提交）。无 Origin/Referer 的请求视为
+        curl/测试等非浏览器工具，放行。"""
+        port = self.server.server_address[1]
+        allowed_hosts = {f"{h}:{port}" for h in self._LOOPBACK_HOSTS}
+        if port == 80:
+            allowed_hosts |= set(self._LOOPBACK_HOSTS)
+        if self.headers.get("Host", "") not in allowed_hosts:
+            self._json({"error": "拒绝访问：Host 不是本机回环地址"}, 403)
+            return False
+        if post and not self._browser_origin_ok(port):
+            self._json({"error": "拒绝访问：跨站请求"}, 403)
+            return False
+        return True
+
+    def _browser_origin_ok(self, port: int) -> bool:
+        origin = self.headers.get("Origin")
+        if origin is None:
+            referer = self.headers.get("Referer")
+            if referer is None:
+                return True
+            origin = referer
+        parts = urlparse(origin)
+        return (
+            parts.scheme == "http"
+            and (parts.hostname or "") in self._LOOPBACK_HOSTS
+            and (parts.port or 80) == port
+        )
+
     def _send(self, status: int, content_type: str, body: bytes) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
@@ -312,6 +345,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, "application/json; charset=utf-8", json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
     def do_GET(self) -> None:  # noqa: N802
+        if not self._access_allowed(post=False):
+            return
         path = urlparse(self.path).path
         if path == "/":
             self._send(200, "text/html; charset=utf-8", INDEX_HTML.read_bytes())
@@ -380,6 +415,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
+        if not self._access_allowed(post=True):
+            return
         path = urlparse(self.path).path
         length = int(self.headers.get("Content-Length") or 0)
         try:

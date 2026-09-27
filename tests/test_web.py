@@ -152,3 +152,79 @@ def test_web_ui_offline_demo_and_error_paths(tmp_path: Path):
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+def test_web_loopback_guard(tmp_path: Path):
+    """回环门禁：Host 非本机（DNS rebinding 模拟）→ 403；跨站 POST（伪造
+    Origin）→ 403；同源 Origin 与无 Origin 的非浏览器请求正常放行。"""
+    import http.client
+
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    proc = subprocess.Popen(
+        [sys.executable, str(SERVER), "--port", "0", "--no-open"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        cwd=str(REPO_ROOT),
+    )
+    try:
+        first_line = proc.stdout.readline().strip()
+        assert first_line.startswith("PORT="), first_line
+        port = int(first_line.split("=", 1)[1])
+
+        payload = json.dumps({"path": ""}).encode("utf-8")
+
+        def raw(method: str, path: str, headers: dict, body: bytes | None = None) -> tuple[int, dict]:
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+            conn.request(method, path, body=body, headers=headers)
+            resp = conn.getresponse()
+            data = json.loads(resp.read().decode("utf-8"))
+            conn.close()
+            return resp.status, data
+
+        # DNS rebinding：Host 是攻击者域名 → 403
+        status, _ = raw("GET", "/api/run", {"Host": "evil.example.com"})
+        assert status == 403
+        # Host 是本机但端口不对 → 403
+        status, _ = raw("GET", "/api/run", {"Host": f"127.0.0.1:{port + 1}"})
+        assert status == 403
+
+        # 跨站 POST：Origin 是恶意页面 → 403
+        status, _ = raw(
+            "POST", "/api/check-vault",
+            {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json",
+             "Origin": "http://evil.example.com"},
+        )
+        assert status == 403
+        # Referer 伪造同样被拦
+        status, _ = raw(
+            "POST", "/api/check-vault",
+            {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json",
+             "Referer": "http://evil.example.com/login"},
+        )
+        assert status == 403
+
+        # 同源 Origin → 放行
+        status, _ = raw(
+            "POST", "/api/check-vault",
+            {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json",
+             "Origin": f"http://127.0.0.1:{port}"},
+            payload,
+        )
+        assert status == 200
+        # 无 Origin/Referer（curl/测试等非浏览器工具）→ 放行
+        status, _ = raw(
+            "POST", "/api/check-vault",
+            {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json"},
+            payload,
+        )
+        assert status == 200
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
