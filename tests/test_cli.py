@@ -1,5 +1,6 @@
 """CLI 冒烟测试：--help 与非法输入退出码（技术方案 §9），全程无网络。"""
 
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -8,13 +9,19 @@ from subtitle_cli.cli import app
 
 runner = CliRunner()
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
 
 def test_help_exits_zero():
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     assert "用法" in result.output or "Usage" in result.output
-    assert "--output" in result.output
-    assert "--cookie" in result.output
+    assert "--output" in _plain(result.output)
+    assert "--cookie" in _plain(result.output)
 
 
 def test_invalid_input_exits_2(tmp_path: Path):

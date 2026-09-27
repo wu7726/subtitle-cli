@@ -24,6 +24,16 @@ def _isolate_user_dirs(tmp_path, monkeypatch):
     monkeypatch.setenv("SUBTITLE_CLI_LOG_DIR", str(tmp_path / "_logs"))
 
 
+@pytest.fixture(autouse=True)
+def _force_no_color(monkeypatch):
+    """typer/click 的帮助文本在 CI 终端探测下会带 ANSI 转义，导致 help 断言
+    随运行环境漂移；一律强制无色彩，输出与平台/终端无关。"""
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("CLICOLOR_FORCE", raising=False)
+    monkeypatch.setenv("TERM", "dumb")
+
+
 @pytest.fixture
 def load_fixture() -> Callable[[str], Any]:
     """从 tests/fixtures/ 加载录制的接口响应 JSON。"""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -11,6 +12,12 @@ from subtitle_cli.bilibili.models import Episode, SubtitleLine, SubtitleTrack
 from subtitle_cli.cli import app
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 class FakeNetClient:
@@ -44,8 +51,8 @@ class FakeNetClient:
 def test_help_lists_vault_options():
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "--vault" in result.output
-    assert "--vault-subdir" in result.output
+    assert "--vault" in _plain(result.output)
+    assert "--vault-subdir" in _plain(result.output)
 
 
 def _patch(monkeypatch, tmp_path: Path) -> Path:
@@ -110,7 +117,7 @@ def test_missing_vault_errors_without_creating_it(tmp_path: Path, monkeypatch):
 
     assert result.exit_code == 2
     assert not vault_dir.exists()
-    assert "--output" in result.output
+    assert "--output" in _plain(result.output)
     assert not cfg_path.exists()  # 写错的路径不该被记住
 
 
