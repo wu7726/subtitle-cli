@@ -166,7 +166,9 @@ class DouyinClient:
             resp = self._http.get(
                 API_DETAIL_URL,
                 params={"aweme_id": aweme_id, "msToken": "x" * 116, **DETAIL_PARAMS},
-                cookies={"ttwid": self._ttwid, "msToken": "x" * 116},
+                # 只给 detail 接口带 Cookie：httpx 已弃用按请求传 cookies=，
+                # 改单请求 Cookie 头，作用域不变（不漏给短链/CDN）
+                headers={"Cookie": f"ttwid={self._ttwid}; msToken={'x' * 116}"},
             )
         except httpx.TransportError as exc:
             raise DouyinError(f"网络错误（{exc.__class__.__name__}）：{aweme_id}") from exc
