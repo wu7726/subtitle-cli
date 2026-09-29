@@ -616,3 +616,45 @@ def test_resolve_input_b23_network_error_raises():
     with ClientHarness(handler) as h:
         with pytest.raises(ValueError, match="短链解析失败"):
             h.client.resolve_input("https://b23.tv/abcDEF")
+
+
+# ---- published / description 补全 ----
+def test_list_season_episodes_fill_published():
+    """合集分集从 arc.pubdate 填 published（北京时间 YYYY-MM-DD）。"""
+    payload = {
+        "code": 0,
+        "data": {
+            "meta": {"name": "示例合集"},
+            "archives": [
+                {"bvid": "BV1QUVb6uEyn", "title": "第一集", "pubdate": 1780029883},
+                {"bvid": "BV1yUVu6BEnp", "title": "第二集", "pubdate": 1780117545},
+            ],
+            "page": {"total": 2},
+        },
+    }
+    with ClientHarness(lambda req: httpx.Response(200, json=payload)) as h:
+        _name, episodes = h.client.list_episodes("123")
+    assert [e.published for e in episodes] == ["2026-05-29", "2026-05-30"]
+
+
+def test_list_parts_fill_published_and_description():
+    """多P分集共享 view 的 pubdate / desc。"""
+    view = {
+        "code": 0,
+        "data": {"bvid": "BV1DE0000001", "title": "多P课程", "videos": 2,
+                 "pubdate": 1780029883, "desc": "课程简介"},
+    }
+    pagelist = {"code": 0, "data": [
+        {"cid": 101, "page": 1, "part": "第一讲"},
+        {"cid": 102, "page": 2, "part": "第二讲"},
+    ]}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "wbi/view" in request.url.path:
+            return httpx.Response(200, json=view)
+        return httpx.Response(200, json=pagelist)
+
+    with ClientHarness(handler) as h:
+        _name, episodes = h.client.list_episodes("BV1DE0000001")
+    assert all(e.published == "2026-05-29" for e in episodes)
+    assert all(e.description == "课程简介" for e in episodes)

@@ -160,3 +160,25 @@ def test_preview_plain_has_no_frontmatter():
     result = preview_first_episode("123", client, log=lambda *_: None)
     assert not result.markdown.startswith("---\n")
     assert "属性头字段" not in format_preview(result)
+
+
+def test_obsidian_frontmatter_carries_published_and_description(tmp_path: Path):
+    """B站分集的发布日期与简介写入属性头（缺失留空，与抖音格式一致）。"""
+    eps = [
+        Episode(bvid="BV01", title="标题1", index=1,
+                published="2026-05-29", description="本集简介"),
+        Episode(bvid="BV02", title="标题2", index=2),
+    ]
+    client = FakeClient(
+        episodes=eps, script={1: track_of("大家好。"), 2: track_of("第二集内容。")},
+    )
+    run_collection(
+        "123", tmp_path, client, log=lambda *_: None,
+        note_mode="obsidian", fetched_at=FIXED_DATE,
+    )
+    text1 = _read(tmp_path, "测试合集", "EP01 标题1.md")
+    assert "published: 2026-05-29" in text1
+    assert "description: 本集简介" in text1
+    text2 = _read(tmp_path, "测试合集", "EP02 标题2.md")
+    assert 'published: ""' in text2
+    assert 'description: ""' in text2

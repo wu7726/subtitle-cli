@@ -10,8 +10,9 @@ import os
 import random
 import re
 import time
-from pathlib import Path
 from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
 
@@ -56,6 +57,13 @@ def extract_bvid(raw: str) -> str | None:
     """从任意输入中提取 BV 号（视频页 URL 或裸 BV 号），无则返回 None。"""
     match = re.search(r"BV[0-9A-Za-z]{10}", raw or "")
     return match.group(0) if match else None
+
+
+def _format_pubdate(ts: int | None) -> str:
+    """unix 秒 → YYYY-MM-DD（北京时间，与抖音 published 格式一致）；空值留空。"""
+    if not ts:
+        return ""
+    return datetime.fromtimestamp(ts, tz=timezone(timedelta(hours=8))).date().isoformat()
 
 
 def normalize_cookie(raw: str) -> tuple[str, str | None]:
@@ -262,6 +270,8 @@ class BilibiliClient:
                 cid=str(p.cid),
                 title=p.part or f"P{p.page}",
                 index=p.page,
+                published=_format_pubdate(view.pubdate),
+                description=view.desc,
             )
             for p in pages
         ]
@@ -300,6 +310,8 @@ class BilibiliClient:
                         cid=None,
                         title=item.title or item.part or item.bvid,
                         index=len(episodes) + 1,
+                        published=_format_pubdate(item.pubdate),
+                        description=item.desc,
                     )
                 )
             total = int(page_data.page.get("total") or 0) or total

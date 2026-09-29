@@ -383,6 +383,8 @@ def _episode_meta(
         source=source,
         author=author,
         created=fetched,
+        published=episode.published,
+        description=episode.description,
         tags=notes.episode_tags(collection_name, base_tag),
         collection=collection_name,
     )

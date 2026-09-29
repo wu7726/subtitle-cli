@@ -33,7 +33,8 @@ class Episode(BaseModel):
     source_url: str = ""  # 单集页面链接（属性头 source 优先取它）
     transcript_url: str | None = None  # 现成文稿地址（播客；B站不使用）
     audio_url: str = ""  # 音频/视频直链（ASR 兜底下载用；B站经 playurl 动态获取）
-    published: str = ""  # 发布日期（抖音 create_time 等；B站不使用）
+    published: str = ""  # 发布日期（抖音 create_time；B站 view/合集 pubdate）
+    description: str = ""  # 视频简介（抖音 desc；B站 view desc，合集分集常为空）
 
 
 class SubtitleLine(BaseModel):
@@ -80,6 +81,8 @@ class ArchiveItem(BaseModel):
     bvid: str
     title: str
     part: str = ""  # 分P标题，合集场景常与 title 重复或更短
+    pubdate: int | None = None  # 发布时间（unix 秒）→ 笔记属性 published
+    desc: str = ""  # 分集简介（合集接口常为空，留空位）
 
 
 class SeasonArchivesPage(BaseModel):
@@ -159,5 +162,7 @@ class ViewData(BaseModel):
     aid: int | None = None
     title: str = ""
     videos: int = 1  # 分P数量
+    pubdate: int | None = None  # 投稿时间（unix 秒）→ 多P分集的 published
+    desc: str = ""  # 视频简介 → 多P分集的 description
     ugc_season: UgcSeason | None = None
     owner: VideoOwner | None = None
