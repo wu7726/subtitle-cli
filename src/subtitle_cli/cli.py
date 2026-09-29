@@ -7,6 +7,7 @@ Cookie 属敏感凭据：只经参数或 BILI_COOKIE 环境变量传入，不写
 from __future__ import annotations
 
 import os
+from typing import Literal
 from pathlib import Path
 
 import typer
@@ -136,6 +137,7 @@ def main(
     if vault_subdir:
         set_platform_subdir(cfg, platform, vault_subdir)
 
+    note_mode: Literal["plain", "obsidian"]
     if output is None and cfg.vault.strip():
         note_mode = "obsidian"
         _check_vault_root(cfg.vault)  # 不可用直接退出 2，绝不静默 mkdir 重建死路径

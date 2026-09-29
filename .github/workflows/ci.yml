@@ -28,6 +28,10 @@ jobs:
       - name: Lint（ruff）
         run: uv run ruff check .
 
+      - name: 类型检查报告（mypy，渐进收紧，暂不卡门禁）
+        continue-on-error: true
+        run: uv run mypy
+
       - name: 测试 + 覆盖率
         run: |
           set -o pipefail

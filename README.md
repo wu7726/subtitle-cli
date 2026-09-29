@@ -213,6 +213,9 @@ pytest
 # Lint 检查（CI 同款规则；规则集中在 pyproject.toml 的 [tool.ruff.lint]）
 ruff check .
 
+# 类型检查（渐进收紧中，当前为报告制）
+mypy
+
 # 集成测试（真实调用B站接口，手动开启）
 SUBTITLE_CLI_INTEGRATION=1 pytest -m integration
 # 端到端用例需要登录态：另设 BILI_COOKIE 环境变量

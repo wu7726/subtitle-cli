@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.6"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.6", "mypy>=1.10"]
 asr = ["faster-whisper>=1.0"]
 
 [project.scripts]
@@ -43,6 +43,15 @@ ignore = [
     "RUF001", "RUF002", "RUF003", # 全中文注释/字符串：全角标点是正常用法，不是歧义字符
     "B008",  # typer 的 Option/Argument 写在参数默认值里是框架惯用法
 ]
+
+[tool.mypy]
+# 渐进收紧：当前为报告制（CI continue-on-error），先观察错误面再逐模块开启严格检查
+python_version = "3.10"
+files = ["src/subtitle_cli"]
+plugins = ["pydantic.mypy"]
+exclude = ["web", "demo"]
+ignore_missing_imports = true
+check_untyped_defs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

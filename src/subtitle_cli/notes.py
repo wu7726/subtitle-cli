@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import date
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from pydantic import BaseModel, Field
 
@@ -174,7 +174,7 @@ def parse_frontmatter(text: str) -> dict[str, object] | None:
     if end is None:
         return None
 
-    result: dict[str, object] = {}
+    result: dict[str, Any] = {}
     pending_list_key: str | None = None
     for raw in lines[1:end]:
         if not raw.strip():
@@ -183,7 +183,7 @@ def parse_frontmatter(text: str) -> dict[str, object] | None:
         if item:
             if pending_list_key is None:
                 return None
-            result[pending_list_key].append(_unyaml(item.group(1)))  # type: ignore[union-attr]
+            result[pending_list_key].append(_unyaml(item.group(1)))
             continue
         kv = _KEY_VALUE.match(raw)
         if not kv:

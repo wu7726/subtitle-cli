@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from collections.abc import Callable, Iterator
+from typing import Any
 
 import httpx
 
@@ -108,7 +109,7 @@ MODELSCOPE_URL = "https://www.modelscope.cn/models/gpustack/faster-whisper-{size
 MODEL_FILES = ("config.json", "model.bin", "tokenizer.json", "vocabulary.txt")
 
 # 进程级模型缓存：同一模型只加载一次（加载耗时数秒，逐集转写时必须复用）
-_MODELS: dict[str, object] = {}
+_MODELS: dict[str, Any] = {}
 
 
 class AsrDependencyError(RuntimeError):
@@ -248,7 +249,7 @@ def _load_model(
     *,
     log: Callable[[str], None] | None = None,
     force_cpu: bool = False,
-):
+) -> Any:
     """加载（或取缓存）Whisper 模型。auto：有可用 CUDA 用显卡，否则 CPU。
 
     按 (模型, 设备, 计算精度) 三元组缓存——加载一次，逐集复用。
@@ -286,7 +287,7 @@ def transcribe_audio(
     *,
     model_size: str = config.ASR_MODEL_SIZE,
     log: Callable[[str], None] = lambda line: None,
-    model: object | None = None,
+    model: Any | None = None,
 ) -> list[SubtitleLine]:
     """转写音频文件为字幕行。
 
@@ -302,16 +303,14 @@ def transcribe_audio(
         # 语言检测在 transcribe() 调用内即时执行，CUDA 缺库会在此暴露：
         # 换 CPU 模型重试一次（仅生产路径，注入的假模型不重试）
         if model is None and _is_cuda_runtime_error(exc):
-            if log:
-                log("⚠️ CUDA 运行库不可用，改用 CPU 转写")
+            log("CUDA 运行库不可用，改用 CPU 转写")
             whisper_model = _load_model(model_size, log=log, force_cpu=True)
             segments_iter, info = whisper_model.transcribe(str(audio_path), **kwargs)
         else:
             raise
-    if log:
-        detected = getattr(info, "language", None)
-        if detected:
-            log(f"识别语言：{detected}，开始转写")
+    detected = getattr(info, "language", None)
+    if detected:
+        log(f"识别语言：{detected}，开始转写")
     lines: list[SubtitleLine] = []
     count = 0
     for seg in segments_iter:  # 生成器：真正的转写计算在此循环中进行
@@ -320,7 +319,7 @@ def transcribe_audio(
             continue
         lines.append(SubtitleLine(from_time=seg.start, to_time=seg.end, content=text))
         count += 1
-        if log and count % config.ASR_LOG_EVERY_SEGMENTS == 0:
+        if count % config.ASR_LOG_EVERY_SEGMENTS == 0:
             log(f"已转写 {count} 段（进行到 {seg.end:.0f} 秒）")
     return lines
 
