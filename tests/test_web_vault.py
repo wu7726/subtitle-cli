@@ -313,3 +313,55 @@ def test_web_rejects_dead_vault_root(tmp_path: Path):
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+def test_web_history_api_and_card(tmp_path: Path):
+    """历史卡：/api/history 读 runs 状态表（与 subtitle-cli-status 同源），
+    页面渲染最近合集；无历史时不显示卡片。"""
+    from subtitle_cli import state as state_mod
+    from subtitle_cli.bilibili.models import Episode, EpisodeStatus
+
+    # 无历史：端点返回空
+    proc, base = _start_server(tmp_path)
+    try:
+        status, resp = _get(base, "/api/history")
+        assert status == 200 and json.loads(resp)["entries"] == []
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+    # 造两条历史（一条含失败/无字幕），重启服务
+    # 状态目录由 conftest 的 SUBTITLE_CLI_STATE_DIR 指向 tmp_path/_state，子进程继承
+    st = state_mod.CollectionState(season_id="123", output_dir=str(tmp_path / "out"),
+                                   collection_name="示例合集")
+    state_mod.record_episode(st, Episode(bvid="BV1", title="EP01", index=1), EpisodeStatus.SUCCESS)
+    state_mod.record_episode(st, Episode(bvid="BV2", title="EP02", index=2), EpisodeStatus.SKIPPED)
+    state_mod.record_episode(st, Episode(bvid="BV3", title="EP03", index=3), EpisodeStatus.NO_SUBTITLE)
+    state_mod.save_collection(st)
+    st2 = state_mod.CollectionState(season_id="456", output_dir=str(tmp_path / "out2"),
+                                    collection_name="播客·某某节目")
+    state_mod.record_episode(st2, Episode(bvid="BV9", title="第1期", index=1), EpisodeStatus.FAILED)
+    state_mod.save_collection(st2)
+
+    proc, base = _start_server(tmp_path)
+    try:
+        status, text = _get(base, "/api/history")
+        entries = json.loads(text)["entries"]
+        assert status == 200 and len(entries) == 2
+        # 按最近更新倒序，第一条是刚保存的示例合集
+        assert entries[0]["name"] == "示例合集"
+        assert entries[0]["success"] == 2 and entries[0]["skipped"] == 1
+        assert entries[0]["nosub"] == 1 and entries[0]["fail"] == 0
+        assert entries[1]["fail"] == 1
+
+        status, html = _get(base, "/")
+        assert 'id="historyCard"' in html and 'id="historyList"' in html
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()

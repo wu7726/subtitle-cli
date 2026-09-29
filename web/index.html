@@ -295,6 +295,18 @@
   .viewerhead .name { font-size: 12px; color: var(--dim); }
   #auditText { white-space: pre-wrap; font-size: 13px; line-height: 1.95; margin: 0; color: #cdc9de; }
 
+  /* ---------- 历史记录（runs 状态表只读镜像） ---------- */
+  .hist-row { display: grid; grid-template-columns: minmax(0, 1.4fr) auto minmax(0, auto);
+    gap: 10px; align-items: baseline; padding: 9px 12px; border: 1px solid var(--line);
+    border-radius: 10px; margin-bottom: 8px; background: rgba(255,255,255,.025);
+    transition: border-color .2s; }
+  .hist-row:hover { border-color: rgba(139, 92, 246, .4); }
+  .hist-name { font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; }
+  .hist-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .hist-time { font-family: var(--mono); font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+  @media (max-width: 720px) { .hist-row { grid-template-columns: 1fr; gap: 3px; } }
+
   #fileProtoBanner { display: none; background: rgba(251, 191, 36, .08); border-bottom: 1px solid rgba(251, 191, 36, .28);
     color: #fbd38d; padding: 11px 20px; font-size: 13px; line-height: 1.8; }
   #fileProtoBanner b { color: #fde68a; }
@@ -489,6 +501,11 @@
     <span class="name" id="viewerName" style="font-size:12px;color:var(--dim)"></span>
     <div class="md" id="mdView"></div>
     <pre class="mdraw" id="rawView"></pre>
+  </section>
+
+  <section class="card reveal" id="historyCard" hidden>
+    <h2>历史记录（最近 10 次）</h2>
+    <div id="historyList"></div>
   </section>
   </section>
   </div>
@@ -931,6 +948,7 @@ async function poll() {
       .join("");
     openFile($("fileList").firstChild, s.files[0].name);
   }
+  loadHistory();  // 本次运行已写入状态表，刷新历史镜像
 }
 
 // ---- reactbits · CountUp 统计 ----
@@ -1035,6 +1053,32 @@ function toggleRaw() {
   $("rawView").style.display = rawMode ? "block" : "none";
 }
 
+// ---- 历史记录（runs 状态表只读镜像，与 subtitle-cli-status 同源） ----
+
+async function loadHistory() {
+  try {
+    const j = await (await fetch("/api/history")).json();
+    const entries = j.entries || [];
+    $("historyCard").hidden = !entries.length;
+    if (!entries.length) return;
+    $("historyList").innerHTML = entries
+      .map((e) => {
+        const bits = [
+          `成功 ${e.success}`,
+          e.skipped ? `跳过 ${e.skipped}` : "",
+          `无字幕 ${e.nosub}`,
+          `失败 ${e.fail}`,
+        ].filter(Boolean).join(" · ");
+        const when = (e.updated || "").replace("T", " ").slice(0, 16);
+        const dir = e.output_dir ? ` title="${esc(e.output_dir)}"` : "";
+        return `<div class="hist-row"${dir}><span class="hist-name">${esc(e.name)}</span>` +
+          `<span class="hist-meta">${esc(bits)}</span>` +
+          `<span class="hist-time">${esc(when)}</span></div>`;
+      })
+      .join("");
+  } catch (e) { /* 历史读取失败不阻塞页面 */ }
+}
+
 $("vaultInput").addEventListener("change", () => { saveVaultConfig(); checkVault(false); });
 $("vaultSubdirInput").addEventListener("change", saveVaultConfig);
 $("outputInput").addEventListener("change", saveVaultConfig);
@@ -1042,6 +1086,7 @@ if (location.protocol === "file:") $("fileProtoBanner").style.display = "block";
 setMode();
 setOutMode();
 loadConfig();
+loadHistory();
 
 /* ==== 视觉增强（reactbits 风格，全部可失败降级）==== */
 try {

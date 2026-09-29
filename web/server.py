@@ -14,6 +14,8 @@ API 层对演示模式也接受 vault 参数，以便离线验证 vault 写入�
 API：
     GET  /                  页面
     GET  /api/run           当前运行状态（轮询）
+    GET  /api/health        轻量探活（启动器区分「已在运行」与「端口被占」）
+    GET  /api/history       最近运行历史（runs 状态表只读镜像，最近 10 条）
     GET  /api/file?name=    读取某集 Markdown（限制在本次输出目录内）
     POST /api/extract       {demo, source, cookie, output, vault, vault_subdir}
     POST /api/preview       提取前审查（vault 模式预览稿带属性头）
@@ -64,6 +66,7 @@ from subtitle_cli.pipeline import (  # noqa: E402
     run_collection,
     summarize,
 )
+from subtitle_cli import state  # noqa: E402
 from subtitle_cli.vault import check_vault, collection_root, load_config, save_config  # noqa: E402
 
 INDEX_HTML = REPO_ROOT / "web" / "index.html"
@@ -352,6 +355,35 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/health":
             # 轻量探活：启动器用它区分「本工具已在运行」与「端口被别的程序占用」
             self._json({"app": "subtitle-cli", "ok": True})
+        elif path == "/api/history":
+            # 只读历史：最近运行的合集（复用 runs 状态表，与 subtitle-cli-status 同源）
+            entries = []
+            try:
+                states = state.iter_collections()[:10]
+            except OSError:
+                states = []
+            for s in states:
+                counts = {"success": 0, "skipped": 0, "nosub": 0, "fail": 0}
+                for ep in s.episodes.values():
+                    if ep.status in (EpisodeStatus.SUCCESS, EpisodeStatus.SKIPPED):
+                        counts["success"] += 1
+                    elif ep.status == EpisodeStatus.NO_SUBTITLE:
+                        counts["nosub"] += 1
+                    elif ep.status == EpisodeStatus.FAILED:
+                        counts["fail"] += 1
+                counts["skipped"] = sum(
+                    1 for ep in s.episodes.values() if ep.status == EpisodeStatus.SKIPPED
+                )
+                entries.append(
+                    {
+                        "name": s.collection_name or s.season_id,
+                        "updated": s.updated,
+                        "output_dir": s.output_dir,
+                        "total": len(s.episodes),
+                        **counts,
+                    }
+                )
+            self._json({"entries": entries})
         elif path == "/api/run":
             with _lock:
                 snapshot = {
