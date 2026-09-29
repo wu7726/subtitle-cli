@@ -3,6 +3,25 @@
 本项目的显著变更记录在此文件。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循语义化版本（1.0 前的 0.x 视为面向个人的快速迭代期）。
 
+## [0.3.0] - 2026-09-29
+
+功能演进轮：补齐最高频的输入形态，让 Obsidian 属性面板真正可用，给网页加上记忆。
+
+### 新增
+
+- **b23.tv 短链支持**：手机 App「复制链接」直接粘贴，自动跟随 302 跳转解析到合集或
+  视频（分享文案里混着文字也可以）；CLI/网页输入提示与 README 同步更新
+- **B站笔记属性头补全**：`published`（合集分集取自接口 arc.pubdate，多P取 view
+  pubdate）与 `description`（多P取 view desc；合集接口常为空则留空）——日期为
+  YYYY-MM-DD（北京时间），与抖音格式一致，Obsidian 可按日期排序检索
+- **网页历史卡**：新增 `GET /api/history`，展示最近 10 次运行的合集名、成功/跳过/
+  无字幕/失败计数与更新时间（复用 runs 状态表，与 subtitle-cli-status 同源，零新
+  持久化）；页面加载与每次任务完成后刷新，无历史时整卡隐藏
+- **mypy 渐进**：dev 依赖与配置就位，CI 以报告制运行（continue-on-error），按模块
+  渐进收紧后转门禁
+
+[0.3.0]: https://github.com/wu7726/subtitle-cli/releases/tag/v0.3.0
+
 ## [0.2.1] - 2026-09-27
 
 启动体验与网页界面改版轮：不加新功能，把「打开工具」和「看着它」这两件事做好。
