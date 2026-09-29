@@ -349,6 +349,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/":
             self._send(200, "text/html; charset=utf-8", INDEX_HTML.read_bytes())
+        elif path == "/api/health":
+            # 轻量探活：启动器用它区分「本工具已在运行」与「端口被别的程序占用」
+            self._json({"app": "subtitle-cli", "ok": True})
         elif path == "/api/run":
             with _lock:
                 snapshot = {

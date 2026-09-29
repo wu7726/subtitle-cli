@@ -80,7 +80,7 @@ def _check_login(client: PlatformClient, log: Callable[[str], None]) -> None:
         log(f"登录态：已登录（{uname}）")
     else:
         log(
-            "⚠️ 未登录：B站不向未登录请求返回字幕列表，本次所有分集都将显示为"
+            "未登录：B站不向未登录请求返回字幕列表，本次所有分集都将显示为"
             "「无字幕」。请检查 Cookie 是否为从浏览器复制的完整整串（需含 "
             "SESSDATA=），且未过期。"
         )
@@ -139,7 +139,7 @@ def run_collection(
     if asr:
         asr_module.ensure_dependency()  # 提前失败：避免下载完音频才发现缺依赖
         if getattr(client, "download_audio", None) is None:
-            log("⚠️ 当前平台不支持音频下载，转写兜底不生效，无字幕的分集将保持无字幕")
+            log("当前平台不支持音频下载，转写兜底不生效，无字幕的分集将保持无字幕")
             asr = False
         elif audio_cache:
             _log_audio_cache(log)
@@ -160,7 +160,7 @@ def run_collection(
             state.save_collection(collection_state, state_root)
         except OSError as exc:
             # 状态是辅助记录，写不进去不该毁掉本次提取
-            log(f"⚠️ 状态记录写入失败（不影响本次提取）：{exc}")
+            log(f"状态记录写入失败（不影响本次提取）：{exc}")
 
     for episode in episodes:
         label = f"EP{episode.index:02d}"
@@ -518,7 +518,7 @@ def format_preview(result: PreviewResult) -> str:
         f"预览第 {result.episode_index} 集：{result.episode_title}"
     ]
     if result.logged_in is False:
-        parts.append("⚠️ 未登录：B站不向未登录请求返回字幕列表，无法预览内容。请检查 Cookie。")
+        parts.append("未登录：B站不向未登录请求返回字幕列表，无法预览内容。请检查 Cookie。")
     if not result.markdown:
         parts.append(
             "第 1 集没有可用字幕，无法预览；可继续批量提取其余分集"
