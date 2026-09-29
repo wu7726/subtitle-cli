@@ -37,6 +37,9 @@ PLAYURL_URL = f"{API_BASE}/x/player/wbi/playurl"
 NAV_URL = f"{API_BASE}/x/web-interface/nav"
 VIEW_URL = f"{API_BASE}/x/web-interface/wbi/view"
 
+# b23.tv 分享短链（手机 App「复制链接」的形态，可能混在分享文案里）
+B23_SHORT_RE = re.compile(r"(?:https?://)?b23\.tv/([\w\-]+)")
+
 
 class BilibiliError(PlatformError):
     """接口调用失败（不可重试的业务/解析错误，或重试耗尽后的网络错误）。"""
@@ -144,7 +147,8 @@ class BilibiliClient:
            - 属于 UGC 合集 → 返回 season_id；
            - 属于多P视频（videos > 1）→ 返回 bvid 本身，按分P批量提取；
            - 单P且无合集 → 报错；
-        4. 其余 → 报错。
+        4. 含 b23.tv 短链 → 跟随 302 后回到 2/3；
+        5. 其余 → 报错。
         """
         text = (raw or "").strip()
         if text.isdigit():
@@ -155,10 +159,39 @@ class BilibiliClient:
         bvid = extract_bvid(text)
         if bvid:
             return self._resolve_bvid(bvid)
+        short = B23_SHORT_RE.search(text)
+        if short:
+            return self._resolve_short_link(f"https://b23.tv/{short.group(1)}")
         raise ValueError(
             f"无法从输入中识别合集：{text[:80]!r}。支持合集页链接（含 sid= 或 "
             f"season_id= 参数）、合集内单个视频或多P视频的链接或 BV 号、"
-            f"纯数字 season_id。b23.tv 短链暂不支持，请先在浏览器中打开并复制完整链接。"
+            f"b23.tv 短链、纯数字 season_id。"
+        )
+
+    def _resolve_short_link(self, short_url: str) -> str:
+        """b23.tv 短链 → 读 302 Location → 交给 season_id / BV 号解析。"""
+        self._sleep(self._rng.uniform(*config.LIST_DELAY_RANGE))
+        url = short_url
+        try:
+            for _ in range(3):  # 最多跟 3 跳，够覆盖 b23.tv 的重定向链
+                resp = self._http.get(url)
+                if resp.status_code not in (301, 302, 303, 307, 308):
+                    break
+                location = resp.headers.get("location", "")
+                if not location:
+                    break
+                url = str(resp.url.join(location))
+                season = re.search(r"[?&](?:sid|season_id)=(\d+)", url)
+                if season:
+                    return season.group(1)
+                bvid = extract_bvid(url)
+                if bvid:
+                    return self._resolve_bvid(bvid)
+        except httpx.HTTPError as exc:
+            raise ValueError(f"b23.tv 短链解析失败（网络错误：{exc}）") from exc
+        raise ValueError(
+            f"b23.tv 短链没有指向可识别的合集或视频：{short_url}。"
+            "请确认链接能在浏览器中正常打开。"
         )
 
     def _resolve_bvid(self, bvid: str) -> str:

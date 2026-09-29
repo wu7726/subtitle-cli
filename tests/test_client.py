@@ -564,3 +564,55 @@ def test_resolve_cookie_missing_sessdata_raises(monkeypatch):
     with pytest.raises(ValueError) as excinfo:
         resolve_bilibili_cookie("buvid3=abc; b_nut=1")
     assert "SESSDATA" in str(excinfo.value)
+
+
+# ---- b23.tv 短链 ----
+def _b23_handler(location: str, view_payload=None):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "b23.tv":
+            return httpx.Response(302, headers={"Location": location})
+        return httpx.Response(200, json=view_payload)
+
+    return handler
+
+
+def test_resolve_input_b23_short_link_to_season_page():
+    """b23.tv 短链 → 302 到合集页（sid=）→ 直接取 season_id，不再查 view。"""
+    with ClientHarness(
+        _b23_handler("https://www.bilibili.com/list/546195?sid=8016518")
+    ) as h:
+        assert h.client.resolve_input("https://b23.tv/abcDEF") == "8016518"
+        assert [r.url.host for r in h.requests] == ["b23.tv"]  # 未触发 view
+
+
+def test_resolve_input_b23_short_link_to_video(load_fixture):
+    """b23.tv 短链 → 302 到视频页 → 复用 BV 解析（查 view 得合集）。"""
+    view_payload = load_fixture("view_ugc_season.json")
+    with ClientHarness(
+        _b23_handler("https://www.bilibili.com/video/BV17TtA6VEuH/?p=1", view_payload)
+    ) as h:
+        assert h.client.resolve_input("https://b23.tv/abcDEF") == "8016518"
+
+
+def test_resolve_input_b23_in_share_text():
+    """手机 App 分享文案里混着文字与短链。"""
+    with ClientHarness(
+        _b23_handler("https://www.bilibili.com/list/546195?sid=8016518")
+    ) as h:
+        assert h.client.resolve_input("好看合集 https://b23.tv/abcDEF 快保存") == "8016518"
+
+
+def test_resolve_input_b23_dead_end_raises():
+    """302 落到没有 BV/sid 的页面 → 明确报错。"""
+    with ClientHarness(_b23_handler("https://www.bilibili.com/")) as h:
+        with pytest.raises(ValueError, match="没有指向可识别的合集或视频"):
+            h.client.resolve_input("https://b23.tv/abcDEF")
+
+
+def test_resolve_input_b23_network_error_raises():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("boom")
+
+    with ClientHarness(handler) as h:
+        with pytest.raises(ValueError, match="短链解析失败"):
+            h.client.resolve_input("https://b23.tv/abcDEF")

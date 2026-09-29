@@ -52,7 +52,7 @@ def _check_vault_root(vault_path: str) -> None:
 def main(
     source: str = typer.Argument(
         ...,
-        help="B站：合集页 URL（含 sid= 或 season_id=）、合集内任一视频的 URL 或 BV 号、纯数字 season_id；"
+        help="B站：合集页 URL（含 sid= 或 season_id=）、合集内任一视频的 URL 或 BV 号、b23.tv 短链、纯数字 season_id；"
         "播客：RSS 地址或 Apple Podcasts 节目链接；抖音：分享口令（含 v.douyin.com 短链）或视频页链接",
     ),
     output: Path | None = typer.Option(
