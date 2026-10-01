@@ -371,3 +371,40 @@ def test_web_history_api_and_card(tmp_path: Path):
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+def test_web_history_delete(tmp_path: Path):
+    """删除一条 runs 记录：/api/history/delete 按 (season_id, output_dir) 定位，
+    删除后列表不再包含；用户笔记目录不受影响。"""
+    from subtitle_cli import state as state_mod
+    from subtitle_cli.bilibili.models import Episode, EpisodeStatus
+
+    st = state_mod.CollectionState(season_id="123", output_dir=str(tmp_path / "out"),
+                                   collection_name="示例合集")
+    state_mod.record_episode(st, Episode(bvid="BV1", title="EP01", index=1), EpisodeStatus.SUCCESS)
+    path = state_mod.save_collection(st)
+    notes_dir = tmp_path / "out" / "示例合集"
+    notes_dir.mkdir(parents=True)
+    (notes_dir / "EP01 标题1.md").write_text("# 笔记", encoding="utf-8")
+
+    proc, base = _start_server(tmp_path)
+    try:
+        status, resp = _post(
+            base,
+            "/api/history/delete",
+            {"season_id": "123", "output_dir": str(tmp_path / "out")},
+        )
+        assert status == 200 and resp["deleted"] is True
+        assert not path.exists()
+        status, text = _get(base, "/api/history")
+        assert json.loads(text)["entries"] == []
+        assert (notes_dir / "EP01 标题1.md").exists()  # 笔记分毫未动
+        # 缺 season_id → 400
+        status, resp = _post(base, "/api/history/delete", {})
+        assert status == 400
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()

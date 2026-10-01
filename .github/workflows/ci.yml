@@ -28,14 +28,13 @@ jobs:
       - name: Lint（ruff）
         run: uv run ruff check .
 
-      - name: 类型检查报告（mypy，渐进收紧，暂不卡门禁）
-        continue-on-error: true
+      - name: 类型检查（mypy 门禁）
         run: uv run mypy
 
       - name: 测试 + 覆盖率
         run: |
           set -o pipefail
-          uv run pytest -q --cov=subtitle_cli --cov-report=term-missing --cov-report=json 2>&1 | tee pytest-output.txt
+          uv run pytest -q --cov=subtitle_cli --cov-report=term-missing --cov-report=json --cov-fail-under=85 2>&1 | tee pytest-output.txt
 
       - name: 失败详情写进注解（免认证可读）
         if: failure()

@@ -36,11 +36,19 @@ def main() -> None:
         server = LocalServer(("127.0.0.1", args.port), Handler)
     except OSError as exc:
         print(f"端口 {args.port} 无法监听：{exc}", file=sys.stderr)
-        print(
-            "很可能是旧的 web/server.py 还在运行：请先关闭它的窗口（或用任务管理器结束"
-            " python 进程），再重新启动；也可以换一个端口，如 --port 8766。",
-            file=sys.stderr,
-        )
+        if exc.errno in (10013, 13):  # WSAEACCES/EACCES：绑定被拒，端口被保留
+            print(
+                "该端口被 Windows 保留（Hyper-V/WSL 会划走一段动态端口区间，范围会变）。"
+                "换一个端口即可：python web/server.py --port 8123；"
+                "或用 --port 0 随机分配。",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "很可能是旧的 web/server.py 还在运行：请先关闭它的窗口（或用任务管理器"
+                " 结束 python 进程），再重新启动；也可以换一个端口，如 --port 8766。",
+                file=sys.stderr,
+            )
         raise SystemExit(1) from None
     port = server.server_address[1]
     url = f"http://127.0.0.1:{port}"

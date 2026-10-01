@@ -175,6 +175,18 @@
 
   .hint { font-size: 12px; color: var(--dim); margin-top: 8px; line-height: 1.8; }
 
+  /* ---------- 提取队列（前端逐个串行，后端单任务模型不变） ---------- */
+  .queue-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .queue-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 100%;
+    padding: 6px 8px 6px 12px; border: 1px solid rgba(255,255,255,.13); border-radius: 9px;
+    background: var(--accent-soft); font-size: 12.5px; color: var(--ink); }
+  .queue-chip .qn { font-family: var(--mono); font-size: 11px; color: var(--accent-strong); flex: none; }
+  .queue-chip .qv { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .queue-chip button { border: none; background: rgba(255,255,255,.08); color: var(--muted);
+    width: 18px; height: 18px; border-radius: 50%; cursor: pointer; font-size: 11px;
+    line-height: 1; flex: none; display: flex; align-items: center; justify-content: center; }
+  .queue-chip button:hover { color: var(--fail); background: rgba(248, 113, 113, .18); }
+
   .row-btn { margin-top: 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 
   /* ---------- reactbits · StarBorder CTA ---------- */
@@ -307,7 +319,7 @@
   #auditText { white-space: pre-wrap; font-size: 13px; line-height: 1.95; margin: 0; color: #cdc9de; }
 
   /* ---------- 历史记录（runs 状态表只读镜像） ---------- */
-  .hist-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px;
+  .hist-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px 12px;
     align-items: center; padding: 10px 14px; border: 1px solid var(--line);
     border-radius: 10px; margin-bottom: 8px; background: rgba(255,255,255,.025);
     transition: border-color .2s; cursor: pointer; }
@@ -318,6 +330,10 @@
   .hist-time { grid-column: 2; grid-row: 1 / span 2; font-family: var(--mono);
     font-size: 11.5px; color: var(--dim); white-space: nowrap; }
   .hist-row:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+  .hist-del { grid-column: 3; grid-row: 1 / span 2; align-self: center; border: none; background: none;
+    color: var(--dim); font-size: 14px; cursor: pointer; padding: 0 2px; line-height: 1;
+    transition: color .2s; }
+  .hist-del:hover { color: var(--fail); }
 
   #fileProtoBanner { display: none; background: rgba(251, 191, 36, .08); border-bottom: 1px solid rgba(251, 191, 36, .28);
     color: #fbd38d; padding: 11px 20px; font-size: 13px; line-height: 1.8; }
@@ -417,6 +433,15 @@
     </div>
     <label for="sourceInput">B站合集链接 / BV 号 / season_id，或播客 RSS / Apple Podcasts 链接，或抖音分享口令</label>
     <input type="text" id="sourceInput" placeholder="B站：合集页链接（含 sid=）、合集里单个视频的链接或 BV 号、b23.tv 短链、多P视频链接、纯数字 season_id；播客：RSS 地址或 Apple Podcasts 节目链接；抖音：分享口令或视频页链接（配合语音转写）">
+    <div id="queueAddRow" hidden>
+      <div class="row-btn" style="margin-top:10px">
+        <button type="button" class="ghostbtn" onclick="addToQueue()">加入队列</button>
+        <span class="hint" style="margin:0">可连续添加多个来源，点「开始提取」后逐个串行提取</span>
+      </div>
+      <div id="queueRow" hidden>
+        <div class="queue-chips" id="queueChips"></div>
+      </div>
+    </div>
     <div id="cookieRow" hidden>
       <label for="cookieInput">B站 Cookie（至少含 SESSDATA；未登录拿不到字幕列表。也可改用环境变量 BILI_COOKIE）</label>
       <input type="password" id="cookieInput" placeholder="粘贴浏览器复制的整串 Cookie，仅本次运行使用，不落盘、不写日志。只复制 SESSDATA 的值也可以">
@@ -549,7 +574,10 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let pollTimer = null;
+let pollDone = null;  // 任务完成时由 poll 触发，供队列串行推进
+let queueRunning = false;
 let rawMode = false;
+let queue = [];
 let obsidianUri = null;
 let currentFiles = [];
 let browseCtx = null;
@@ -562,6 +590,8 @@ function setMode() {
   $("proxyRow").hidden = demo;
   $("outputSection").hidden = demo;
   $("asrRow").hidden = demo;
+  $("queueAddRow").hidden = demo;
+  renderQueue();
   $("demoHint").hidden = !demo;
   if (demo) {
     if (!$("sourceInput").value.trim()) $("sourceInput").value = DEMO_VIDEO_URL;
@@ -826,6 +856,31 @@ function chooseBrowse() {
 
 // ---- 提取 ----
 
+function addToQueue() {
+  const v = $("sourceInput").value.trim();
+  if (!v) return;
+  if (!queue.includes(v)) queue.push(v);
+  $("sourceInput").value = "";
+  renderQueue();
+}
+
+function removeFromQueue(i) {
+  queue.splice(i, 1);
+  renderQueue();
+}
+
+function renderQueue() {
+  const demo = $("modeDemo").checked;
+  $("queueRow").hidden = demo || !queue.length;
+  $("queueChips").innerHTML = queue
+    .map((q, i) => {
+      const label = esc(q.length > 46 ? q.slice(0, 44) + "…" : q).replace(/'/g, "&#39;");
+      return `<span class="queue-chip"><span class="qn">${i + 1}</span><span class="qv" title="${esc(q)}">${label}</span>` +
+        `<button type="button" onclick="removeFromQueue(${i})" title="移出队列">×</button></span>`;
+    })
+    .join("");
+}
+
 function collectTarget(startBody) {
   if ($("modeDemo").checked) return true;
   const source = $("sourceInput").value.trim();
@@ -889,28 +944,56 @@ async function previewFirst() {
   }
 }
 
-async function start() {
-  const body = { demo: $("modeDemo").checked };
-  if (!collectTarget(body)) return;
-  resetPanels();
-  $("startBtn").disabled = true;
-  setBusy("正在提取，全程串行 + 随机间隔…");
-  try {
-    const resp = await postJSON("/api/extract", body);
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ error: "请求失败 " + resp.status }));
-      showError(err.error || "启动失败");
+function launchTask() {
+  // 按当前表单发起一次提取；resolve(true)=任务跑完（任意结果），false=没能启动
+  return new Promise((resolve) => {
+    const body = { demo: $("modeDemo").checked };
+    if (!collectTarget(body)) { $("startBtn").disabled = false; resolve(false); return; }
+    resetPanels();
+    $("startBtn").disabled = true;
+    setBusy("正在提取，全程串行 + 随机间隔…");
+    postJSON("/api/extract", body).then(async (resp) => {
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "请求失败 " + resp.status }));
+        showError(err.error || "启动失败");
+        $("startBtn").disabled = false;
+        setBusy("");
+        resolve(false);
+        return;
+      }
+      pollDone = () => resolve(true);
+      pollTimer = setInterval(poll, 400);
+      poll();
+    }).catch((e) => {
+      showError(e.message);
       $("startBtn").disabled = false;
       setBusy("");
-      return;
+      resolve(false);
+    });
+  });
+}
+
+async function start() {
+  if (queueRunning) return;
+  $("startBtn").disabled = true;
+  if (queue.length && !$("modeDemo").checked) {
+    queueRunning = true;
+    const items = queue.slice();
+    for (let i = 0; i < items.length; i++) {
+      $("sourceInput").value = items[i];
+      setBusy(`队列 ${i + 1} / ${items.length}：正在提取…`);
+      const ok = await launchTask();
+      if (!ok) break;  // 输入非法等启动失败：终止队列，已跑完的产物不受影响
     }
-    pollTimer = setInterval(poll, 400);
-    poll();
-  } catch (e) {
-    showError(e.message);
+    queue = [];
+    queueRunning = false;
+    renderQueue();
+    $("sourceInput").value = "";
     $("startBtn").disabled = false;
     setBusy("");
+    return;
   }
+  await launchTask();
 }
 
 // ---- 运行状态轮询 ----
@@ -957,6 +1040,9 @@ async function poll() {
   pollTimer = null;
   $("startBtn").disabled = false;
   setBusy("");
+  const done = pollDone;
+  pollDone = null;
+  if (done) done();
 
   if (s.error) showError(s.error);
   if (s.summary != null) {
@@ -1093,6 +1179,21 @@ function toggleRaw() {
 
 // ---- 历史记录（runs 状态表只读镜像，与 subtitle-cli-status 同源） ----
 
+async function deleteHistory(seasonId, outputDir) {
+  if (!confirm("删除该条提取记录？已生成的笔记不受影响；重跑会重新联网检查。")) return;
+  try {
+    const resp = await postJSON("/api/history/delete", { season_id: seasonId, output_dir: outputDir });
+    if (!resp.ok) {
+      const j = await resp.json().catch(() => ({}));
+      showError(j.error || "删除失败");
+      return;
+    }
+    loadHistory();
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
 function fillFromHistory(seasonId) {
   if (!seasonId) return;
   $("modeReal").checked = true;
@@ -1119,9 +1220,11 @@ async function loadHistory() {
         const when = (e.updated || "").replace("T", " ").slice(0, 16);
         const dir = e.output_dir ? ` title="${esc(e.output_dir)}"` : "";
         const sid = esc(e.season_id || "").replace(/'/g, "&#39;");
-        return `<div class="hist-row" role="button" tabindex="0" title="${dir ? esc(e.output_dir) : ""}点击复填来源，配合「开始提取」增量重跑" onclick="fillFromHistory('${sid}')" onkeydown="if(event.key==='Enter')fillFromHistory('${sid}')"><span class="hist-name">${esc(e.name)}</span>` +
+        const outDir = esc(e.output_dir || "").replace(/'/g, "&#39;");
+        return `<div class="hist-row" role="button" tabindex="0" title="${outDir}——点击复填来源，配合「开始提取」增量重跑" onclick="fillFromHistory('${sid}')" onkeydown="if(event.key==='Enter')fillFromHistory('${sid}')"><span class="hist-name">${esc(e.name)}</span>` +
           `<span class="hist-meta">${esc(bits)}</span>` +
-          `<span class="hist-time">${esc(when)}</span></div>`;
+          `<span class="hist-time">${esc(when)}</span>` +
+          `<button class="hist-del" title="删除该条提取记录（不影响已生成的笔记）" onclick="event.stopPropagation();deleteHistory('${sid}','${outDir}')">×</button></div>`;
       })
       .join("");
   } catch (e) { /* 历史读取失败不阻塞页面 */ }

@@ -210,6 +210,23 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "请求体不是合法 JSON"}, 400)
             return
 
+        if path == "/api/history/delete":
+            # 删除一条 runs 状态记录（工具自有的结论缓存；不碰任何用户笔记）。
+            # (season_id, output_dir) 是状态文件的复合身份，缺一不可
+            season_id = (data.get("season_id") or "").strip()
+            output_dir = (data.get("output_dir") or "").strip()
+            if not season_id:
+                self._json({"error": "缺少 season_id"}, 400)
+                return
+            target = runs_state.collection_state_path(season_id, output_dir)
+            try:
+                target.unlink(missing_ok=True)
+            except OSError as exc:
+                self._json({"error": f"删除失败：{exc}"}, 500)
+                return
+            self._json({"deleted": True})
+            return
+
         if path == "/api/config":
             cfg = load_config()
             if isinstance(data.get("vault"), str):
