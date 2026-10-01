@@ -119,6 +119,7 @@ def run_collection(
     state_root: Path | None = None,
     recheck: bool = False,
     audio_cache: bool = True,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> RunOutcome:
     """跑完整流程。输入不合法抛 ValueError（CLI 转为退出码 2）。
 
@@ -131,6 +132,8 @@ def run_collection(
     recheck=True：已确认「无字幕」的分集也重新联网查一遍（默认跳过——
     那是查过的结论，不是没做过）。
     audio_cache=False：转写不走音频缓存，每次都重新下载。
+    on_progress：每集处理完回调 (已完成数, 总集数)——跳过也计数；网页端
+    用它驱动真实进度条，CLI 不传。
     """
     season_id = client.resolve_input(raw_input)
     collection_name, episodes = client.list_episodes(season_id)
@@ -167,6 +170,8 @@ def run_collection(
         except OSError as exc:
             # 状态是辅助记录，写不进去不该毁掉本次提取
             log(f"状态记录写入失败（不影响本次提取）：{exc}")
+        if on_progress is not None:
+            on_progress(len(results), len(episodes))
 
     for episode in episodes:
         label = f"EP{episode.index:02d}"
@@ -184,10 +189,14 @@ def run_collection(
             # 不该因为落点空了就重新下载一遍
             results.append(EpisodeResult(episode=episode, status=EpisodeStatus.SKIPPED))
             log(f"{label} 已处理过，跳过")
+            if on_progress is not None:
+                on_progress(len(results), len(episodes))
             continue
         if recorded == EpisodeStatus.NO_SUBTITLE and not recheck:
             results.append(EpisodeResult(episode=episode, status=EpisodeStatus.NO_SUBTITLE))
             log(f"{label} 上次已确认无字幕，跳过（要重查加 --recheck）")
+            if on_progress is not None:
+                on_progress(len(results), len(episodes))
             continue
         if storage.is_downloaded(path):
             # 状态表出现之前产出的笔记没有记录，只能靠产物文件兜底。别删这条：

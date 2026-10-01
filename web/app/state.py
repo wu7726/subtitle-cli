@@ -26,6 +26,7 @@ def fresh_state() -> dict:
         "vault": "",
         "obsidian_open": None,  # obsidian:// 打开合集索引的 URI（不可用时 None）
         "log": [],  # 逐行进度（run_collection/migrate 的 log 回调输出）
+        "progress": None,  # {"done": int, "total": int}——提取时由 on_progress 回调更新
         "summary": None,
         "exit_code": None,
         "collection_name": None,

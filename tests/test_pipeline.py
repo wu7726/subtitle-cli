@@ -325,3 +325,19 @@ def test_invalid_input_raises_value_error(tmp_path: Path):
         run_collection("BV123", tmp_path, client)
 
 
+
+
+def test_run_collection_reports_progress(tmp_path: Path):
+    """on_progress 每集收尾回调 (已完成, 总数)；跳过与失败也计入。"""
+    eps = make_episodes(3)
+    client = FakeClient(
+        episodes=eps,
+        script={1: track_of("一。"), 2: None, 3: RiskControlError("风控")},
+    )
+    seen: list[tuple[int, int]] = []
+    outcome = run_collection(
+        "123", tmp_path, client, log=lambda *_: None,
+        on_progress=lambda done, total: seen.append((done, total)),
+    )
+    assert seen == [(1, 3), (2, 3), (3, 3)]
+    assert not outcome.aborted

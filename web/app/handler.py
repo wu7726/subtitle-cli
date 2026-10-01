@@ -394,6 +394,12 @@ class Handler(BaseHTTPRequestHandler):
                     note_mode=note_mode,
                     vault=vault,
                 )
+
+            def _progress(done: int, total: int) -> None:
+                """任务线程回调：写入真实进度供 /api/run 轮询。"""
+                with _lock:
+                    STATE["progress"] = {"done": done, "total": total}
+
             threading.Thread(
                 target=run_extract_job,
                 args=(source, cookie, demo, output),
@@ -404,6 +410,7 @@ class Handler(BaseHTTPRequestHandler):
                     "asr": asr,
                     "asr_model": asr_model,
                     "asr_limit": asr_limit,
+                    "on_progress": _progress,
                 },
                 daemon=True,
             ).start()
