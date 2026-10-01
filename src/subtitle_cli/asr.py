@@ -74,7 +74,8 @@ def _register_cuda_dll_dirs() -> list[Path]:
     if os.name == "nt" and not _DLL_DIRS_REGISTERED:
         for directory in dirs:
             try:
-                _DLL_HANDLES.append(os.add_dll_directory(str(directory)))
+                # add_dll_directory 仅 Windows 提供；mypy 按 Linux 检查会报 attr-defined
+                _DLL_HANDLES.append(os.add_dll_directory(str(directory)))  # type: ignore[attr-defined]
             except OSError:
                 continue
         _DLL_DIRS_REGISTERED = True
