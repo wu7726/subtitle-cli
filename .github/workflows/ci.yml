@@ -29,7 +29,9 @@ jobs:
         run: uv run ruff check .
 
       - name: 类型检查（mypy 门禁）
-        run: uv run mypy
+        run: |
+          set -o pipefail
+          uv run mypy 2>&1 | tee mypy-output.txt
 
       - name: 测试 + 覆盖率
         run: |
@@ -40,9 +42,15 @@ jobs:
         if: failure()
         run: |
           {
-            grep -E "^(FAILED|ERROR)" pytest-output.txt || true
-            echo "--- tail ---"
-            tail -n 35 pytest-output.txt
+            if [ -f pytest-output.txt ]; then
+              grep -E "^(FAILED|ERROR)" pytest-output.txt || true
+              echo "--- pytest tail ---"
+              tail -n 35 pytest-output.txt
+            fi
+            if [ -f mypy-output.txt ]; then
+              echo "--- mypy ---"
+              tail -n 30 mypy-output.txt
+            fi
           } > failure-summary.txt
           python3 -c "
           import urllib.parse
