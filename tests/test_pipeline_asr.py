@@ -46,7 +46,7 @@ def fake_transcribe(monkeypatch):
     """打桩 ensure_dependency 与 transcribe_audio，按内容映射假转写结果。"""
     monkeypatch.setattr(asr_mod, "ensure_dependency", lambda: None)
 
-    def _transcribe(path, *, model_size="small", log=lambda s: None, model=None):
+    def _transcribe(path, *, model_size="small", log=lambda s: None, model=None, proxy=None):
         return [
             SubtitleLine(from_time=0.0, to_time=1.0, content=f"转写自 {Path(path).name}。")
         ]

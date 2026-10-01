@@ -140,7 +140,12 @@ def model_complete(directory: Path) -> bool:
     )
 
 
-def download_model(model_size: str, *, log: Callable[[str], None] = lambda line: None) -> Path:
+def download_model(
+    model_size: str,
+    *,
+    log: Callable[[str], None] = lambda line: None,
+    proxy: str | None = None,
+) -> Path:
     """确保模型文件齐全：本地已缓存 → 直接用；否则 ModelScope 下载，
     失败回落 HuggingFace。返回模型目录。"""
     directory = model_dir(model_size)
@@ -148,7 +153,7 @@ def download_model(model_size: str, *, log: Callable[[str], None] = lambda line:
         return directory
     directory.mkdir(parents=True, exist_ok=True)
     try:
-        _download_from_modelscope(model_size, directory, log)
+        _download_from_modelscope(model_size, directory, log, proxy=proxy)
         if model_complete(directory):
             return directory
         raise AsrModelError(f"ModelScope 下载不完整：{directory}")
@@ -160,14 +165,16 @@ def download_model(model_size: str, *, log: Callable[[str], None] = lambda line:
         raise AsrModelError(f"HuggingFace 下载后模型仍不完整：{directory}") from exc
 
 
-def _download_from_modelscope(model_size: str, directory: Path, log) -> None:
+def _download_from_modelscope(
+    model_size: str, directory: Path, log, proxy: str | None = None
+) -> None:
     for filename in MODEL_FILES:
         target = directory / filename
         if target.exists():
             continue
         url = MODELSCOPE_URL.format(size=model_size, file=filename)
         log(f"下载模型文件：{filename}（ModelScope）")
-        _download_file_resumable(url, target)
+        _download_file_resumable(url, target, proxy=proxy)
 
 
 def _download_from_huggingface(model_size: str, directory: Path, log) -> None:
@@ -186,7 +193,9 @@ def _download_from_huggingface(model_size: str, directory: Path, log) -> None:
             target.write_bytes(source.read_bytes())
 
 
-def _download_file_resumable(url: str, target: Path, *, attempts: int = 3) -> None:
+def _download_file_resumable(
+    url: str, target: Path, *, attempts: int = 3, proxy: str | None = None
+) -> None:
     """流式下载到 .part 临时文件，支持断点续传，完成后原子替换。"""
     partial = target.with_suffix(target.suffix + ".part")
     last_error: Exception | None = None
@@ -197,7 +206,9 @@ def _download_file_resumable(url: str, target: Path, *, attempts: int = 3) -> No
             headers["Range"] = f"bytes={partial.stat().st_size}-"
             mode = "ab"
         try:
-            with httpx.stream("GET", url, headers=headers, timeout=60, follow_redirects=True) as resp:
+            with httpx.stream(
+                "GET", url, headers=headers, timeout=60, follow_redirects=True, proxy=proxy
+            ) as resp:
                 if resp.status_code == 206:
                     pass  # 续传成功
                 elif resp.status_code == 200:
@@ -249,6 +260,7 @@ def _load_model(
     *,
     log: Callable[[str], None] | None = None,
     force_cpu: bool = False,
+    proxy: str | None = None,
 ) -> Any:
     """加载（或取缓存）Whisper 模型。auto：有可用 CUDA 用显卡，否则 CPU。
 
@@ -265,7 +277,7 @@ def _load_model(
         raise AsrDependencyError(INSTALL_HINT) from exc
     if log:
         log(f"加载语音转写模型 {model_size}（device={device}, compute_type={compute_type}）")
-    directory = download_model(model_size, log=log or (lambda line: None))
+    directory = download_model(model_size, log=log or (lambda line: None), proxy=proxy)
     model = WhisperModel(str(directory), device=device, compute_type=compute_type)
     _MODELS[key] = model
     return model
@@ -288,6 +300,7 @@ def transcribe_audio(
     model_size: str = config.ASR_MODEL_SIZE,
     log: Callable[[str], None] = lambda line: None,
     model: Any | None = None,
+    proxy: str | None = None,
 ) -> list[SubtitleLine]:
     """转写音频文件为字幕行。
 
@@ -295,7 +308,7 @@ def transcribe_audio(
     - 语言默认自动检测（中文内容即输出简体中文）；
     - model 参数供测试注入假模型，生产路径走 _load_model 缓存。
     """
-    whisper_model = model or _load_model(model_size, log=log)
+    whisper_model = model or _load_model(model_size, log=log, proxy=proxy)
     kwargs = _transcribe_kwargs()
     try:
         segments_iter, info = whisper_model.transcribe(str(audio_path), **kwargs)
@@ -304,7 +317,7 @@ def transcribe_audio(
         # 换 CPU 模型重试一次（仅生产路径，注入的假模型不重试）
         if model is None and _is_cuda_runtime_error(exc):
             log("CUDA 运行库不可用，改用 CPU 转写")
-            whisper_model = _load_model(model_size, log=log, force_cpu=True)
+            whisper_model = _load_model(model_size, log=log, force_cpu=True, proxy=proxy)
             segments_iter, info = whisper_model.transcribe(str(audio_path), **kwargs)
         else:
             raise

@@ -114,6 +114,7 @@ class BilibiliClient:
         self,
         cookie: str | None = None,
         *,
+        proxy: str | None = None,
         http_client: httpx.Client | None = None,
         rng: random.Random | None = None,
         sleep: Callable[[float], None] | None = None,
@@ -127,6 +128,7 @@ class BilibiliClient:
                 "Accept": "application/json",
             },
             timeout=config.REQUEST_TIMEOUT,
+            proxy=proxy or None,
         )
         self._rng = rng or random.Random()
         self._sleep = sleep or time.sleep

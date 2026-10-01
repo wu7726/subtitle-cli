@@ -21,7 +21,7 @@ runner = CliRunner()
 def fake_podcast(monkeypatch):
     created = []
 
-    def _factory(raw: str, cookie: str | None = None):
+    def _factory(raw: str, cookie: str | None = None, proxy: str | None = None):
         client = FakePodcastClient(make_episodes(), SCRIPT)
         created.append((raw, cookie, client))
         return client

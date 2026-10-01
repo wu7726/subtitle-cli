@@ -60,6 +60,7 @@ class PodcastClient:
     def __init__(
         self,
         *,
+        proxy: str | None = None,
         http_client: httpx.Client | None = None,
         rng: random.Random | None = None,
         sleep: Callable[[float], None] | None = None,
@@ -68,6 +69,7 @@ class PodcastClient:
             headers={"User-Agent": config.USER_AGENT},
             timeout=config.REQUEST_TIMEOUT,
             follow_redirects=True,
+            proxy=proxy or None,
         )
         self._rng = rng or random.Random()
         self._sleep = sleep or time.sleep

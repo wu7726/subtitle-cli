@@ -33,6 +33,7 @@ from subtitle_cli.dispatch import (
     create_client,
     detect_platform,
     platform_subdir,
+    resolve_proxy,
     set_platform_subdir,
 )
 from subtitle_cli.migration import scan_collections
@@ -286,6 +287,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 if not demo and platform == BILIBILI:
                     cookie, _ = resolve_bilibili_cookie(cookie)
+                proxy = resolve_proxy(data.get("proxy"))
                 lines: list[str] = []
                 if demo:
                     from demo.run_demo import DEMO_SOURCE
@@ -293,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
                     start_demo()
                     source = source or DEMO_SOURCE
                 try:
-                    with create_client(source, cookie or None) as client:
+                    with create_client(source, cookie or None, proxy=proxy) as client:
                         result = preview_first_episode(
                             source, client, log=lambda line: lines.append(line),
                             note_mode="obsidian" if vault else "plain",
@@ -377,6 +379,7 @@ class Handler(BaseHTTPRequestHandler):
             asr_model = str(data.get("asr_model") or ASR_MODEL_SIZE)
             if asr_model not in ASR_MODEL_CHOICES:
                 asr_model = ASR_MODEL_SIZE
+            proxy = resolve_proxy(data.get("proxy"))
             asr_limit_raw = data.get("asr_limit")
             asr_limit = (
                 int(asr_limit_raw)
@@ -411,6 +414,7 @@ class Handler(BaseHTTPRequestHandler):
                     "asr_model": asr_model,
                     "asr_limit": asr_limit,
                     "on_progress": _progress,
+                    "proxy": proxy,
                 },
                 daemon=True,
             ).start()

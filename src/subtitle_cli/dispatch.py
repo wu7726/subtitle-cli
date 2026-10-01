@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 
 from .bilibili.client import BilibiliClient
@@ -39,14 +40,25 @@ def detect_platform(raw: str) -> str:
     return BILIBILI
 
 
-def create_client(raw: str, cookie: str | None = None) -> PlatformClient:
-    """按输入平台创建客户端；Cookie 只对B站有意义，其他平台直接忽略。"""
+def create_client(
+    raw: str, cookie: str | None = None, proxy: str | None = None
+) -> PlatformClient:
+    """按输入平台创建客户端；Cookie 只对B站有意义，代理三平台共用。"""
     platform = detect_platform(raw)
     if platform == PODCAST:
-        return PodcastClient()
+        return PodcastClient(proxy=proxy)
     if platform == DOUYIN:
-        return DouyinClient()
-    return BilibiliClient(cookie=cookie)
+        return DouyinClient(proxy=proxy)
+    return BilibiliClient(cookie=cookie, proxy=proxy)
+
+
+def resolve_proxy(explicit: str | None = None) -> str | None:
+    """代理解析：显式传入 > SUBTITLE_CLI_PROXY 环境变量；空值返回 None。
+
+    形如 http://127.0.0.1:7890；SOCKS 需要 httpx[socks] 依赖（README 说明）。
+    """
+    value = (explicit or "").strip() or os.environ.get("SUBTITLE_CLI_PROXY") or ""
+    return value or None
 
 
 def platform_subdir(cfg: VaultConfig, platform: str) -> str:

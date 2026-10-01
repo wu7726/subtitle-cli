@@ -20,6 +20,7 @@ from .dispatch import (
     create_client,
     detect_platform,
     platform_subdir,
+    resolve_proxy,
     set_platform_subdir,
 )
 from .errors import PlatformError
@@ -111,6 +112,12 @@ def main(
         "--no-audio-cache",
         help="转写不复用音频缓存，每次都重新下载（默认：转写成功即删、失败的留着供重跑直接转写）",
     ),
+    proxy: str | None = typer.Option(
+        None,
+        "--proxy",
+        help="HTTP/SOCKS 代理（如 http://127.0.0.1:7890），三平台请求与模型下载共用；"
+        "也可用环境变量 SUBTITLE_CLI_PROXY。SOCKS 需先 pip install httpx[socks]",
+    ),
 ) -> None:
     """提取B站合集或播客的字幕，保存为 Markdown 文件。"""
     force_utf8_stdio()
@@ -156,8 +163,11 @@ def main(
         typer.echo(f"输出目录不可用：{output}（{exc}）", err=True)
         raise typer.Exit(code=2) from None
 
+    proxy = resolve_proxy(proxy)
+    if proxy:
+        file_log.info("代理已启用")
     try:
-        with create_client(source, cookie) as client:
+        with create_client(source, cookie, proxy=proxy) as client:
             if preview:
                 file_log.info("预览第 1 集：%s", source)
                 result = preview_first_episode(
@@ -171,7 +181,7 @@ def main(
             outcome = run_collection(
                 source, output, client, log=typer.echo, note_mode=note_mode,
                 asr=asr, asr_model=asr_model, asr_limit=asr_limit, recheck=recheck,
-                audio_cache=not no_audio_cache,
+                audio_cache=not no_audio_cache, proxy=proxy,
             )
     except ValueError as exc:
         typer.echo(f"输入无效：{exc}", err=True)

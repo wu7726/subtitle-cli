@@ -120,6 +120,7 @@ def run_collection(
     recheck: bool = False,
     audio_cache: bool = True,
     on_progress: Callable[[int, int], None] | None = None,
+    proxy: str | None = None,
 ) -> RunOutcome:
     """跑完整流程。输入不合法抛 ValueError（CLI 转为退出码 2）。
 
@@ -238,7 +239,9 @@ def run_collection(
                 log(f"{label} 无字幕（已达本次转写上限 {asr_limit} 集，未转写）")
                 continue
             try:
-                track = _asr_fallback(client, episode, asr_model, log, cache=audio_cache)
+                track = _asr_fallback(
+                    client, episode, asr_model, log, cache=audio_cache, proxy=proxy
+                )
                 asr_count += 1
             except PlatformError as exc:
                 _finish(episode, EpisodeStatus.FAILED, str(exc))
@@ -310,6 +313,7 @@ def _asr_fallback(
     log: Callable[[str], None],
     *,
     cache: bool = True,
+    proxy: str | None = None,
 ) -> SubtitleTrack:
     """无字幕分集的语音转写兜底：取音频（缓存优先）→ faster-whisper → 字幕行。
 
@@ -337,7 +341,9 @@ def _asr_fallback(
         staging.replace(audio_path)
         log(f"{label} 音频已下载（{audio_path.stat().st_size // 1024} KB），开始转写")
     try:
-        lines = asr_module.transcribe_audio(audio_path, model_size=asr_model, log=log)
+        lines = asr_module.transcribe_audio(
+            audio_path, model_size=asr_model, log=log, proxy=proxy
+        )
         if not lines:
             raise PlatformError(f"语音转写结果为空（可能无人声或纯音乐）：{episode.title}")
     except Exception:

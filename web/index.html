@@ -417,6 +417,10 @@
         <span id="cookieCheckResult" class="hint"></span>
       </div>
     </div>
+    <div id="proxyRow" hidden>
+      <label for="proxyInput">代理（可选；三平台请求与语音模型下载共用，仅本次运行使用）</label>
+      <input type="text" id="proxyInput" placeholder="如 http://127.0.0.1:7890；也可用环境变量 SUBTITLE_CLI_PROXY。SOCKS 需 pip install httpx[socks]">
+    </div>
     <div id="demoHint" class="hint">
       演示合集《示例合集·美食漫谈》共 6 集，覆盖三类结果：CC 字幕选轨、AI 字幕回退（EP03）、无字幕（EP05）。
       输入框已预填演示合集第 1 集的视频链接——粘贴合集里任意一个视频网址即可自动识别并爬取整个合集。
@@ -547,6 +551,7 @@ const DEMO_VIDEO_URL = "https://www.bilibili.com/video/BV1DE0000001/";
 function setMode() {
   const demo = $("modeDemo").checked;
   $("cookieRow").hidden = demo;
+  $("proxyRow").hidden = demo;
   $("outputSection").hidden = demo;
   $("asrRow").hidden = demo;
   $("demoHint").hidden = !demo;
@@ -823,6 +828,7 @@ function collectTarget(startBody) {
   }
   startBody.source = source;
   startBody.cookie = $("cookieInput").value.trim();
+  startBody.proxy = $("proxyInput").value.trim();
   if ($("outVault").checked) {
     const vault = $("vaultInput").value.trim();
     if (!vault) {

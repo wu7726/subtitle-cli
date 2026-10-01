@@ -96,6 +96,9 @@ subtitle-cli "https://example.com/feed.xml" --vault "D:/Obsidian/MyVault"
 subtitle-cli "https://podcasts.apple.com/cn/podcast/xxx/id123456" --vault "D:/Obsidian/MyVault"
 subtitle-cli "https://example.com/feed.xml" --vault "D:/Obsidian/MyVault" --vault-subdir "学习/播客"
 
+# 走代理（国内网络环境；三平台请求与模型下载共用，也可设环境变量 SUBTITLE_CLI_PROXY）
+subtitle-cli <合集URL或season_id> --proxy http://127.0.0.1:7890
+
 # 无字幕时本地语音转写兜底（需先 pip install -e ".[asr]"）
 subtitle-cli <合集URL或season_id> --asr                          # 默认 medium 模型，不限转写集数
 subtitle-cli <合集URL或season_id> --asr --asr-limit 5            # 本次最多转写 5 集

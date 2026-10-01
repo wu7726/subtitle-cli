@@ -104,6 +104,7 @@ def run_extract_job(
     asr_model: str = ASR_MODEL_SIZE,
     asr_limit: int | None = None,
     on_progress=None,
+    proxy: str | None = None,
 ) -> None:
     try:
         platform = detect_platform(source)
@@ -124,11 +125,11 @@ def run_extract_job(
             start_demo()
             source = (source or "").strip() or DEMO_SOURCE
         Path(output_dir).mkdir(parents=True, exist_ok=True)
-        with create_client(source, cookie or None) as client:
+        with create_client(source, cookie or None, proxy=proxy) as client:
             outcome = run_collection(
                 source, Path(output_dir), client, log=log_line, note_mode=note_mode,
                 asr=asr, asr_model=asr_model, asr_limit=asr_limit,
-                on_progress=on_progress,
+                on_progress=on_progress, proxy=proxy,
             )
         STATE["summary"] = summarize(outcome)
         STATE["exit_code"] = 1 if has_failure(outcome) else 0
