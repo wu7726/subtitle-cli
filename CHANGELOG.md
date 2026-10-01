@@ -3,6 +3,32 @@
 本项目的显著变更记录在此文件。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循语义化版本（1.0 前的 0.x 视为面向个人的快速迭代期）。
 
+## [0.4.0] - 2026-10-01
+
+体验演进轮：长任务可感知、网络环境可配置、网页有了操作记忆。
+
+### 新增
+
+- **真实进度条**：`run_collection` 新增 `on_progress(done, total)` 回调（跳过/
+  失败/无字幕都计入），网页进度条从扫动动画升级为实心 N/M + 百分比，提前
+  终止停在已完成处；CLI 不传回调，行为不变
+- **代理支持**：`--proxy` 参数 / `SUBTITLE_CLI_PROXY` 环境变量 / 网页设置卡
+  三处入口，三平台客户端请求与语音模型下载（ModelScope 断点续传）共用；
+  SOCKS 需额外安装 `httpx[socks]`
+- **网页历史卡可操作**：点击历史行自动切真实模式并复填来源，配合「开始提取」
+  即增量重跑（/api/history 增加 season_id）
+- **单集 Obsidian 直达**：vault 模式下每条产物附 `obsidian://` 链接，文件
+  列表一键跳进对应单集
+
+### 变更
+
+- **web/server.py 拆包为 web/app/ 包**：路由门禁（handler.py）、任务线程
+  （jobs.py）、共享状态（state.py）、服务基类（httpd.py），server.py 留
+  启动入口；行为不变，黑盒测试全绿
+- 历史卡改全宽双行布局，修复长合集名被挤成不可见
+
+[0.4.0]: https://github.com/wu7726/subtitle-cli/releases/tag/v0.4.0
+
 ## [0.3.0] - 2026-09-29
 
 功能演进轮：补齐最高频的输入形态，让 Obsidian 属性面板真正可用，给网页加上记忆。
