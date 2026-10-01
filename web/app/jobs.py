@@ -141,6 +141,13 @@ def run_extract_job(
             STATE["obsidian_open"] = _obsidian_uri(
                 vault_path, _vault_rel_index_path(subdir, outcome.collection_name)
             )
+            # 单集直达：每条产物附 obsidian:// 链接（vault 根有效时才有值）
+            base_rel = (
+                f"{subdir.strip('/')}/{storage.collection_dirname(outcome.collection_name)}"
+            ).strip("/")
+            for f in STATE["files"]:
+                stem = f["name"][:-3] if f["name"].endswith(".md") else f["name"]
+                f["obsidian_uri"] = _obsidian_uri(vault_path, f"{base_rel}/{stem}")
         STATE["phase"] = "done"
     except ValueError as exc:
         file_log.error("提取输入无效：%s", exc)

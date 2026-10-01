@@ -153,6 +153,11 @@ def test_web_vault_apis(tmp_path: Path):
         assert state["phase"] == "done" and state["exit_code"] == 0, state
         assert state["note_mode"] == "obsidian"
         assert state["files"][0]["badge"] == "索引"
+        # vault 模式下每条产物带 obsidian:// 单集直达链接
+        assert all(
+            f.get("obsidian_uri", "").startswith("obsidian://open?vault=")
+            for f in state["files"]
+        )
         # 文件日志记录任务起止（事后取证渠道）；Cookie 纪律同样适用于日志
         log_text = (tmp_path / "_logs" / "subtitle-cli.log").read_text(encoding="utf-8")
         assert "提取开始" in log_text and "提取结束" in log_text
@@ -353,6 +358,7 @@ def test_web_history_api_and_card(tmp_path: Path):
         assert status == 200 and len(entries) == 2
         # 按最近更新倒序，第一条是刚保存的示例合集
         assert entries[0]["name"] == "示例合集"
+        assert entries[0]["season_id"] == "123"
         assert entries[0]["success"] == 2 and entries[0]["skipped"] == 1
         assert entries[0]["nosub"] == 1 and entries[0]["fail"] == 0
         assert entries[1]["fail"] == 1

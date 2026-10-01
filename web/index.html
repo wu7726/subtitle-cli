@@ -87,7 +87,7 @@
   .layout { display: grid; grid-template-columns: 408px minmax(0, 1fr); gap: 16px; align-items: start; margin-top: 20px; }
   .layout > .console { position: sticky; top: 84px; }
   .bento { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; grid-auto-flow: dense; align-items: start; }
-  #progressCard, #filesCard, #viewerCard { grid-column: 1 / -1; }
+  #progressCard, #filesCard, #viewerCard, #historyCard { grid-column: 1 / -1; }
   /* 待命占位：Bento 里还没有任何可见产物卡时补位，出现第一个产物即自动隐退 */
   .standby { grid-column: 1 / -1; display: none; border: 1px dashed rgba(255,255,255,.15);
     border-radius: var(--radius); padding: 38px 24px; text-align: center; color: var(--dim);
@@ -256,12 +256,19 @@
 
   /* ---------- files / viewer ---------- */
   /* ---------- reactbits · AnimatedList 文件条目交错入场 ---------- */
+  .filechip { display: inline-flex; align-items: stretch; margin: 0 8px 8px 0;
+    animation: fileIn .45s cubic-bezier(.2,.7,.3,1) both; animation-delay: var(--d, 0ms); }
+  .filechip .filebtn { margin: 0; border-radius: 10px 0 0 10px; }
+  .filechip .filebtn:has(+ .obsjump) { border-radius: 10px 0 0 10px; }
+  .obsjump { display: flex; align-items: center; padding: 0 10px; border: 1px solid rgba(255,255,255,.13);
+    border-left: none; border-radius: 0 10px 10px 0; background: rgba(255,255,255,.03);
+    color: var(--muted); transition: all .2s; }
+  .obsjump:hover { color: var(--accent-strong); border-color: rgba(139, 92, 246, .55); background: var(--accent-soft); }
   .filebtn {
     display: inline-flex; align-items: center; margin: 0 8px 8px 0; padding: 8px 14px;
     border: 1px solid rgba(255,255,255,.13); border-radius: 10px; background: rgba(255,255,255,.03);
     cursor: pointer; font-size: 13px; font-family: inherit; color: var(--ink);
     position: relative; overflow: hidden; transition: all .2s;
-    animation: fileIn .45s cubic-bezier(.2,.7,.3,1) both; animation-delay: var(--d, 0ms);
   }
   @keyframes fileIn { from { opacity: 0; transform: translateY(8px) scale(.97); } }
   .filebtn::after { content: ""; position: absolute; inset: 0; pointer-events: none;
@@ -300,16 +307,17 @@
   #auditText { white-space: pre-wrap; font-size: 13px; line-height: 1.95; margin: 0; color: #cdc9de; }
 
   /* ---------- 历史记录（runs 状态表只读镜像） ---------- */
-  .hist-row { display: grid; grid-template-columns: minmax(0, 1.4fr) auto minmax(0, auto);
-    gap: 10px; align-items: baseline; padding: 9px 12px; border: 1px solid var(--line);
+  .hist-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px;
+    align-items: center; padding: 10px 14px; border: 1px solid var(--line);
     border-radius: 10px; margin-bottom: 8px; background: rgba(255,255,255,.025);
-    transition: border-color .2s; }
+    transition: border-color .2s; cursor: pointer; }
   .hist-row:hover { border-color: rgba(139, 92, 246, .4); }
-  .hist-name { font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; }
-  .hist-meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .hist-time { font-family: var(--mono); font-size: 11.5px; color: var(--dim); white-space: nowrap; }
-  @media (max-width: 720px) { .hist-row { grid-template-columns: 1fr; gap: 3px; } }
+  .hist-name { grid-column: 1; font-size: 13.5px; color: var(--ink); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .hist-meta { grid-column: 1; font-size: 12px; color: var(--muted); }
+  .hist-time { grid-column: 2; grid-row: 1 / span 2; font-family: var(--mono);
+    font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+  .hist-row:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
 
   #fileProtoBanner { display: none; background: rgba(251, 191, 36, .08); border-bottom: 1px solid rgba(251, 191, 36, .28);
     color: #fbd38d; padding: 11px 20px; font-size: 13px; line-height: 1.8; }
@@ -366,7 +374,7 @@
     .modes { flex-direction: column; }
     .brand-sub { display: none; }
     .bento { grid-template-columns: minmax(0, 1fr); }
-    #progressCard, #summaryCard, #auditCard, #filesCard, #viewerCard { grid-column: auto; }
+    #progressCard, #summaryCard, #auditCard, #filesCard, #viewerCard, #historyCard { grid-column: auto; }
   }
 </style>
 </head>
@@ -966,10 +974,14 @@ async function poll() {
   if (s.files && s.files.length) {
     currentFiles = s.files;
     $("filesCard").hidden = false;
+    const OBS_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>';
     $("fileList").innerHTML = s.files
       .map((f, i) => {
         const name = esc(f.name).replace(/'/g, "&#39;");
-        return `<button class="filebtn${i === 0 ? " active" : ""}" style="--d:${i * 70}ms" onclick="openFile(this, '${name}')">${esc(f.name)}<span class="tag ${tagClass(f.badge)}">${esc(f.badge)}</span></button>`;
+        const jump = f.obsidian_uri
+          ? `<a class="obsjump" href="${esc(f.obsidian_uri)}" target="_blank" title="在 Obsidian 中打开">${OBS_SVG}</a>`
+          : "";
+        return `<span class="filechip" style="--d:${i * 70}ms"><button class="filebtn${i === 0 ? " active" : ""}" onclick="openFile(this, '${name}')">${esc(f.name)}<span class="tag ${tagClass(f.badge)}">${esc(f.badge)}</span></button>${jump}</span>`;
       })
       .join("");
     openFile($("fileList").firstChild, s.files[0].name);
@@ -1081,6 +1093,15 @@ function toggleRaw() {
 
 // ---- 历史记录（runs 状态表只读镜像，与 subtitle-cli-status 同源） ----
 
+function fillFromHistory(seasonId) {
+  if (!seasonId) return;
+  $("modeReal").checked = true;
+  setMode();
+  $("sourceInput").value = seasonId;
+  $("sourceInput").scrollIntoView({ behavior: "smooth", block: "center" });
+  $("sourceInput").focus();
+}
+
 async function loadHistory() {
   try {
     const j = await (await fetch("/api/history")).json();
@@ -1097,7 +1118,8 @@ async function loadHistory() {
         ].filter(Boolean).join(" · ");
         const when = (e.updated || "").replace("T", " ").slice(0, 16);
         const dir = e.output_dir ? ` title="${esc(e.output_dir)}"` : "";
-        return `<div class="hist-row"${dir}><span class="hist-name">${esc(e.name)}</span>` +
+        const sid = esc(e.season_id || "").replace(/'/g, "&#39;");
+        return `<div class="hist-row" role="button" tabindex="0" title="${dir ? esc(e.output_dir) : ""}点击复填来源，配合「开始提取」增量重跑" onclick="fillFromHistory('${sid}')" onkeydown="if(event.key==='Enter')fillFromHistory('${sid}')"><span class="hist-name">${esc(e.name)}</span>` +
           `<span class="hist-meta">${esc(bits)}</span>` +
           `<span class="hist-time">${esc(when)}</span></div>`;
       })

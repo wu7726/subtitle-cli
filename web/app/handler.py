@@ -125,6 +125,7 @@ class Handler(BaseHTTPRequestHandler):
                 entries.append(
                     {
                         "name": s.collection_name or s.season_id,
+                        "season_id": s.season_id,
                         "updated": s.updated,
                         "output_dir": s.output_dir,
                         "total": len(s.episodes),
