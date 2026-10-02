@@ -3,6 +3,23 @@
 本项目的显著变更记录在此文件。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循语义化版本（1.0 前的 0.x 视为面向个人的快速迭代期）。
 
+## [0.6.0] - 2026-10-01
+
+质量与工作流轮：转写更准、AI 总结更顺手、类型门禁再进一步。
+
+### 新增
+
+- **ASR 术语提示**：`--asr-prompt "傅里叶变换, 卷积"` / 网页 ASR 选项新增
+  术语输入——通过 faster-whisper 的 `initial_prompt` 显著提升课程类内容的
+  专有名词转写准确率；非空才传参，缺省行为不变
+- **合集合并导出**：CLI `--merge` 与网页结果卡「合并导出全文」按钮，把
+  全部分集拼成《合集名-全文.md》（剥离属性头、按 EP 序号数值排序、索引页
+  与产物自身豁免、重复合并幂等），整卷喂给 AI 总结
+- **mypy strict 渐进第一刀**：pipeline/converter/vault/state/merge 五个
+  纯逻辑模块开启 `disallow_untyped_defs`（CI 硬门禁内）
+
+[0.6.0]: https://github.com/wu7726/subtitle-cli/releases/tag/v0.6.0
+
 ## [0.5.0] - 2026-10-01
 
 效率与可运维轮：一次整理多个合集，工程门禁全线转正。
