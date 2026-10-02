@@ -408,3 +408,50 @@ def test_web_history_delete(tmp_path: Path):
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+def test_web_merge_api(tmp_path: Path):
+    """/api/merge：合集目录合并导出，目录穿越被拒，缺参 400。"""
+    proc, base = _start_server(tmp_path)
+    try:
+        out = tmp_path / "out" / "示例合集"
+        out.mkdir(parents=True)
+        (out / "EP01 一.md").write_text("---\ntitle: x\n---\n\n第一集。", encoding="utf-8")
+        (out / "EP02 二.md").write_text("第二集。", encoding="utf-8")
+
+        status, resp = _post(
+            base,
+            "/api/merge",
+            {"dir": str(tmp_path / "out"), "collection": "示例合集"},
+        )
+        assert status == 200 and resp["name"] == "示例合集-全文.md"
+        merged = out / "示例合集-全文.md"
+        text = merged.read_text(encoding="utf-8")
+        assert "## EP01 一" in text and "第二集。" in text
+        assert "title:" not in text
+
+        # 目录穿越：collection 经清洗不会逃出合集目录
+        status, resp = _post(
+            base,
+            "/api/merge",
+            {"dir": str(tmp_path / "out"), "collection": "../../secret"},
+        )
+        assert status in (200, 400)
+        if status == 200:
+            assert not (tmp_path / "secret-全文.md").exists()
+
+        # 缺参 → 400
+        status, resp = _post(base, "/api/merge", {"dir": str(tmp_path / "out")})
+        assert status == 400
+        # 空目录 → 400 无可合并分集
+        (tmp_path / "empty" / "空合集").mkdir(parents=True)
+        status, resp = _post(
+            base, "/api/merge", {"dir": str(tmp_path / "empty"), "collection": "空合集"}
+        )
+        assert status == 400 and "没有可合并" in resp["error"]
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()

@@ -24,6 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from subtitle_cli import state as runs_state
+from subtitle_cli import storage
 from subtitle_cli.bilibili.client import BilibiliClient, resolve_bilibili_cookie
 from subtitle_cli.bilibili.models import EpisodeStatus
 from subtitle_cli.config import ASR_MODEL_CHOICES, ASR_MODEL_SIZE
@@ -36,6 +37,7 @@ from subtitle_cli.dispatch import (
     resolve_proxy,
     set_platform_subdir,
 )
+from subtitle_cli.merge import merge_collection
 from subtitle_cli.migration import scan_collections
 from subtitle_cli.pipeline import (
     format_preview,
@@ -235,6 +237,26 @@ class Handler(BaseHTTPRequestHandler):
                 cfg.subdir = data["subdir"].strip()
             save_config(cfg)
             self._json(cfg.model_dump())
+            return
+
+        if path == "/api/merge":
+            # 合并导出：把当次合集的分集笔记拼成一个全文 md（快操作，同步返回）
+            directory = (data.get("dir") or "").strip()
+            collection = (data.get("collection") or "").strip()
+            if not directory or not collection:
+                self._json({"error": "缺少合集目录或名称"}, 400)
+                return
+            base = Path(directory).resolve()
+            target_dir = base / storage.collection_dirname(collection)
+            if base not in target_dir.parents:  # 目录穿越防护，与 /api/file 同款
+                self._json({"error": "非法路径"}, 400)
+                return
+            try:
+                merged = merge_collection(target_dir, collection)
+            except ValueError as exc:
+                self._json({"error": str(exc)}, 400)
+                return
+            self._json({"name": merged.name})
             return
 
         if path == "/api/check-vault":

@@ -533,7 +533,11 @@
   </section>
 
   <section class="card reveal" id="filesCard" hidden>
-    <h2>生成的文件</h2>
+    <div class="viewerhead">
+      <h2 style="margin:0">生成的文件</h2>
+      <button class="ghostbtn" id="mergeBtn" style="display:none" onclick="mergeExport()"
+        title="把本合集全部分集拼成一个 md（落在合集目录内，整卷喂给 AI 总结）">合并导出全文</button>
+    </div>
     <div id="fileList"></div>
   </section>
 
@@ -582,6 +586,8 @@ let rawMode = false;
 let queue = [];
 let obsidianUri = null;
 let currentFiles = [];
+let lastOutputDir = "";
+let lastCollectionName = "";
 let browseCtx = null;
 
 const DEMO_VIDEO_URL = "https://www.bilibili.com/video/BV1DE0000001/";
@@ -737,6 +743,7 @@ function resetPanels() {
   $("errorBox").textContent = "";
   $("exitBadge").textContent = "";
   $("openObsidian").style.display = "none";
+  $("mergeBtn").style.display = "none";
   obsidianUri = null;
   currentFiles = [];
 }
@@ -1062,7 +1069,10 @@ async function poll() {
   }
   if (s.files && s.files.length) {
     currentFiles = s.files;
+    lastOutputDir = s.output_dir || "";
+    lastCollectionName = s.collection_name || "";
     $("filesCard").hidden = false;
+    $("mergeBtn").style.display = "inline-block";
     const OBS_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>';
     $("fileList").innerHTML = s.files
       .map((f, i) => {
@@ -1144,6 +1154,23 @@ function showViewerContent(content) {
   $("rawView").textContent = content;
   if (rawMode) { $("mdView").style.display = "none"; $("rawView").style.display = "block"; }
   else { $("mdView").style.display = "block"; $("rawView").style.display = "none"; }
+}
+
+async function mergeExport() {
+  if (!lastCollectionName || !lastOutputDir) return;
+  const btn = $("mergeBtn");
+  btn.disabled = true;
+  try {
+    const resp = await postJSON("/api/merge", { dir: lastOutputDir, collection: lastCollectionName });
+    const j = await resp.json();
+    if (!resp.ok) { showError(j.error || "合并失败"); return; }
+    await openByName(j.name);
+    $("viewerCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function openByName(name) {

@@ -104,6 +104,8 @@ def write_collection_index(
     for md in collection_dir.glob("EP*.md"):
         if md.stem == index_stem:  # 合集名以 EP 开头时避免把索引自收录
             continue
+        if md.stem.endswith("-全文"):  # 合并导出产物不进双链索引
+            continue
         match = _EP_STEM.fullmatch(md.stem)
         if match:
             found.append((int(match.group(1)), md.stem, match.group(2)))

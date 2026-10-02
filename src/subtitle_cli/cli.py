@@ -25,6 +25,7 @@ from .dispatch import (
 )
 from .errors import PlatformError
 from .logging_setup import setup_logging
+from .merge import merge_outcome
 from .pipeline import format_preview, has_failure, preview_first_episode, run_collection, summarize
 from .stdio import force_utf8_stdio
 from .vault import check_vault, collection_root, load_config, save_config
@@ -112,6 +113,12 @@ def main(
         "--no-audio-cache",
         help="转写不复用音频缓存，每次都重新下载（默认：转写成功即删、失败的留着供重跑直接转写）",
     ),
+    merge: bool = typer.Option(
+        False,
+        "--merge",
+        help="提取完成后把全部分集合并导出为《合集名-全文.md》（整卷喂给 AI 总结用；"
+        "正文一字未改，仅按分集分节）",
+    ),
     asr_prompt: str | None = typer.Option(
         None,
         "--asr-prompt",
@@ -190,6 +197,9 @@ def main(
                 audio_cache=not no_audio_cache, proxy=proxy,
                 asr_prompt=asr_prompt,
             )
+            if merge:
+                merged = merge_outcome(outcome, output)
+                typer.echo(f"已合并导出：{merged}")
     except ValueError as exc:
         typer.echo(f"输入无效：{exc}", err=True)
         raise typer.Exit(code=2) from None

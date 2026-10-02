@@ -135,3 +135,25 @@ def test_dead_vault_from_config_errors_not_silently_recreated(tmp_path: Path, mo
     assert result.exit_code == 2
     assert not dead.exists()
     assert json.loads(cfg_path.read_text(encoding="utf-8"))["vault"] == str(dead)  # 配置不动
+
+
+def test_cli_merge_flag_writes_combined_doc(monkeypatch, tmp_path: Path):
+    """--merge：提取完成后在合集目录生成《合集名-全文.md》。"""
+    _patch(monkeypatch, tmp_path)
+    vault = tmp_path / "vault"
+    (vault / ".obsidian").mkdir(parents=True)
+    result = runner.invoke(
+        app,
+        [
+            "https://www.bilibili.com/list/546195?sid=123",
+            "--vault", str(vault),
+            "--merge",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    merged = vault / "B站字幕" / "测试合集" / "测试合集-全文.md"
+    assert merged.exists()
+    text = merged.read_text(encoding="utf-8")
+    assert "# 测试合集（全文合并）" in text
+    assert "## EP01 标题1" in text
+    assert "已合并导出" in result.output
