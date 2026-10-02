@@ -105,6 +105,7 @@ def run_extract_job(
     asr_limit: int | None = None,
     on_progress=None,
     proxy: str | None = None,
+    asr_prompt: str | None = None,
 ) -> None:
     try:
         platform = detect_platform(source)
@@ -129,7 +130,7 @@ def run_extract_job(
             outcome = run_collection(
                 source, Path(output_dir), client, log=log_line, note_mode=note_mode,
                 asr=asr, asr_model=asr_model, asr_limit=asr_limit,
-                on_progress=on_progress, proxy=proxy,
+                on_progress=on_progress, proxy=proxy, asr_prompt=asr_prompt,
             )
         STATE["summary"] = summarize(outcome)
         STATE["exit_code"] = 1 if has_failure(outcome) else 0

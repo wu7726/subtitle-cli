@@ -497,6 +497,8 @@
         <label for="asrLimit">本次最多转写</label>
         <input type="number" id="asrLimit" min="1" style="width:64px" placeholder="不限">
         <span>集（留空不限，重跑自动跳过已成功分集）</span>
+        <label for="asrPrompt" style="margin-top:10px">术语提示（可选）：逗号分隔的专有名词，提升课程类转写准确率</label>
+        <input type="text" id="asrPrompt" placeholder="如：傅里叶变换, 卷积, 香农定理">
       </span>
     </div>
     <div class="row-btn">
@@ -908,6 +910,7 @@ function collectTarget(startBody) {
   if ($("asrToggle").checked) {
     startBody.asr = true;
     startBody.asr_model = $("asrModel").value;
+    startBody.asr_prompt = $("asrPrompt").value.trim();
     const limit = parseInt($("asrLimit").value, 10);
     if (Number.isInteger(limit) && limit > 0) startBody.asr_limit = limit;
   }

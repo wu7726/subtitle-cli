@@ -46,7 +46,7 @@ def fake_transcribe(monkeypatch):
     """打桩 ensure_dependency 与 transcribe_audio，按内容映射假转写结果。"""
     monkeypatch.setattr(asr_mod, "ensure_dependency", lambda: None)
 
-    def _transcribe(path, *, model_size="small", log=lambda s: None, model=None, proxy=None):
+    def _transcribe(path, *, model_size="small", log=lambda s: None, model=None, proxy=None, initial_prompt=None):
         return [
             SubtitleLine(from_time=0.0, to_time=1.0, content=f"转写自 {Path(path).name}。")
         ]
@@ -215,3 +215,25 @@ def test_no_audio_cache_ignores_existing_file_and_leaves_nothing(tmp_path, monke
     assert client.downloads == ["BV01"]  # 无视缓存，仍然下载
     assert outcome.results[0].status == EpisodeStatus.FAILED
     assert not cached.exists()  # 失败也不留
+
+
+def test_asr_prompt_reaches_transcriber(tmp_path, fake_transcribe):
+    """--asr-prompt 的术语提示透传到 transcribe_audio 的 initial_prompt。"""
+    received: list[str | None] = []
+    real = fake_transcribe  # fixture 返回 _transcribe 本体，便于包一层记录
+
+    def recording(path, *, model_size="small", log=lambda s: None, model=None,
+                  proxy=None, initial_prompt=None):
+        received.append(initial_prompt)
+        return real(path, model_size=model_size, log=log, model=model,
+                    proxy=proxy, initial_prompt=initial_prompt)
+
+    monkeypatch = __import__("pytest").MonkeyPatch()
+    monkeypatch.setattr(asr_mod, "transcribe_audio", recording)
+    eps = [Episode(bvid="BV1", cid="c1", title="第1讲 傅里叶", index=1)]
+    client = FakeAsrClient(episodes=eps, script={1: None})  # 无字幕 → 走转写
+    run_collection(
+        "123", tmp_path, client, log=lambda *_: None,
+        asr=True, asr_prompt="傅里叶变换, 卷积",
+    )
+    assert received == ["傅里叶变换, 卷积"]

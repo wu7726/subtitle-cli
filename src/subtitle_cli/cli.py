@@ -112,6 +112,12 @@ def main(
         "--no-audio-cache",
         help="转写不复用音频缓存，每次都重新下载（默认：转写成功即删、失败的留着供重跑直接转写）",
     ),
+    asr_prompt: str | None = typer.Option(
+        None,
+        "--asr-prompt",
+        help="语音转写的术语提示：逗号/空格分隔的专有名词，显著提升课程类内容的"
+        "转写准确率（如：傅里叶变换, 卷积, 香农定理）",
+    ),
     proxy: str | None = typer.Option(
         None,
         "--proxy",
@@ -182,6 +188,7 @@ def main(
                 source, output, client, log=typer.echo, note_mode=note_mode,
                 asr=asr, asr_model=asr_model, asr_limit=asr_limit, recheck=recheck,
                 audio_cache=not no_audio_cache, proxy=proxy,
+                asr_prompt=asr_prompt,
             )
     except ValueError as exc:
         typer.echo(f"输入无效：{exc}", err=True)

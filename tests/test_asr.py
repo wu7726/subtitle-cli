@@ -172,3 +172,38 @@ def test_resolve_device_force_cpu_wins(monkeypatch):
 def test_resolve_device_honours_explicit_setting(monkeypatch):
     monkeypatch.setattr("subtitle_cli.config.ASR_DEVICE", "cpu")
     assert asr._resolve_device(False, None) == "cpu"
+
+
+# ---- initial_prompt 术语提示 ----
+def test_transcribe_audio_passes_initial_prompt(tmp_path, monkeypatch):
+    """非空 initial_prompt 经 kwargs 传给 faster-whisper 的 transcribe。"""
+    import subtitle_cli.asr as asr_mod
+    from subtitle_cli.asr import transcribe_audio
+
+    seen: dict = {}
+
+    class FakeModel:
+        def transcribe(self, path, **kwargs):
+            seen.update(kwargs)
+            return iter([]), None
+
+    monkeypatch.setattr(asr_mod, "_load_model", lambda *a, **k: FakeModel())
+    transcribe_audio(tmp_path / "a.wav", initial_prompt="傅里叶变换, 卷积")
+    assert seen.get("initial_prompt") == "傅里叶变换, 卷积"
+
+
+def test_transcribe_audio_omits_empty_prompt(tmp_path, monkeypatch):
+    """未提供术语提示时 kwargs 不含 initial_prompt（保持默认行为）。"""
+    import subtitle_cli.asr as asr_mod
+    from subtitle_cli.asr import transcribe_audio
+
+    seen: dict = {}
+
+    class FakeModel:
+        def transcribe(self, path, **kwargs):
+            seen.update(kwargs)
+            return iter([]), None
+
+    monkeypatch.setattr(asr_mod, "_load_model", lambda *a, **k: FakeModel())
+    transcribe_audio(tmp_path / "a.wav")
+    assert "initial_prompt" not in seen

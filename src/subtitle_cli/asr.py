@@ -302,6 +302,7 @@ def transcribe_audio(
     log: Callable[[str], None] = lambda line: None,
     model: Any | None = None,
     proxy: str | None = None,
+    initial_prompt: str | None = None,
 ) -> list[SubtitleLine]:
     """转写音频文件为字幕行。
 
@@ -311,6 +312,9 @@ def transcribe_audio(
     """
     whisper_model = model or _load_model(model_size, log=log, proxy=proxy)
     kwargs = _transcribe_kwargs()
+    if initial_prompt:
+        # 术语提示：显著提升课程/专业内容的专有名词转写准确率
+        kwargs["initial_prompt"] = initial_prompt
     try:
         segments_iter, info = whisper_model.transcribe(str(audio_path), **kwargs)
     except RuntimeError as exc:

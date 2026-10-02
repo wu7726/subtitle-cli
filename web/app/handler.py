@@ -398,6 +398,7 @@ class Handler(BaseHTTPRequestHandler):
             if asr_model not in ASR_MODEL_CHOICES:
                 asr_model = ASR_MODEL_SIZE
             proxy = resolve_proxy(data.get("proxy"))
+            asr_prompt = (data.get("asr_prompt") or "").strip() or None
             asr_limit_raw = data.get("asr_limit")
             asr_limit = (
                 int(asr_limit_raw)
@@ -433,6 +434,7 @@ class Handler(BaseHTTPRequestHandler):
                     "asr_limit": asr_limit,
                     "on_progress": _progress,
                     "proxy": proxy,
+                    "asr_prompt": asr_prompt,
                 },
                 daemon=True,
             ).start()
