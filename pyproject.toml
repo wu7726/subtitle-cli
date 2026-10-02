@@ -53,6 +53,17 @@ exclude = ["web", "demo"]
 ignore_missing_imports = true
 check_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# 纯逻辑模块先开严格签名检查（CI 硬门禁）
+module = [
+    "subtitle_cli.pipeline",
+    "subtitle_cli.converter",
+    "subtitle_cli.vault",
+    "subtitle_cli.state",
+    "subtitle_cli.merge",
+]
+disallow_untyped_defs = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # 集成测试（真实网络请求）默认排除，仅 pytest -m integration 或显式覆盖时运行

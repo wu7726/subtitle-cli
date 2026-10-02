@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 from subtitle_cli import storage
+from subtitle_cli.pipeline import RunOutcome
 
 _EP_NUM = re.compile(r"EP(\d+)")
 
@@ -53,7 +54,7 @@ def merge_collection(collection_dir: Path, collection_name: str) -> Path:
     return target
 
 
-def merge_outcome(outcome, output_dir: Path) -> Path:
+def merge_outcome(outcome: RunOutcome, output_dir: Path) -> Path:
     """按运行结果定位合集目录并合并（CLI --merge 与网页 /api/merge 共用）。"""
     return merge_collection(
         Path(output_dir) / storage.collection_dirname(outcome.collection_name),
