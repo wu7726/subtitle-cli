@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import typer
 
+from datetime import datetime
+
 from . import state
 from .bilibili.models import EpisodeStatus
 from .stdio import force_utf8_stdio
@@ -27,6 +29,14 @@ _LABELS = {
 }
 
 
+def _local_time(iso: str) -> str:
+    """ISO UTC 时间戳 → 本地时区短格式（解析失败原样返回）。"""
+    try:
+        return datetime.fromisoformat(iso).astimezone().strftime("%m-%d %H:%M")
+    except ValueError:
+        return iso
+
+
 def render(record: state.CollectionState, only_failed: bool = False) -> str | None:
     """一份状态记录的文本；无失败集且 only_failed 时返回 None（不打印）。"""
     episodes = sorted(record.episodes.values(), key=lambda e: e.index)
@@ -38,7 +48,7 @@ def render(record: state.CollectionState, only_failed: bool = False) -> str | No
         f"《{record.collection_name or record.season_id}》共 {len(record.episodes)} 集"
         f"（season {record.season_id}）",
         f"落点  {record.output_dir or '未记录'}",
-        f"更新  {record.updated}",
+        f"更新  {_local_time(record.updated)}",
     ]
     for e in episodes:
         line = f"  [{_LABELS[e.status]}] EP{e.index:02d} {e.title}"

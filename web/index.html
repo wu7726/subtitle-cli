@@ -334,6 +334,8 @@
     color: var(--dim); font-size: 14px; cursor: pointer; padding: 0 2px; line-height: 1;
     transition: color .2s; }
   .hist-del:hover { color: var(--fail); }
+  .hist-del.armed, .hist-del.armed:hover { color: #fff; background: rgba(248, 113, 113, .55);
+    border-radius: 6px; font-size: 11px; padding: 0 6px; width: auto; height: 20px; }
 
   #fileProtoBanner { display: none; background: rgba(251, 191, 36, .08); border-bottom: 1px solid rgba(251, 191, 36, .28);
     color: #fbd38d; padding: 11px 20px; font-size: 13px; line-height: 1.8; }
@@ -1209,8 +1211,33 @@ function toggleRaw() {
 
 // ---- 历史记录（runs 状态表只读镜像，与 subtitle-cli-status 同源） ----
 
-async function deleteHistory(seasonId, outputDir) {
-  if (!confirm("删除该条提取记录？已生成的笔记不受影响；重跑会重新联网检查。")) return;
+let deleteArmed = null;  // {sid, dir, timer}——两步行内确认状态
+
+function disarmDelete() {
+  if (deleteArmed) clearTimeout(deleteArmed.timer);
+  deleteArmed = null;
+  document.querySelectorAll(".hist-del.armed").forEach((b) => {
+    b.textContent = "×";
+    b.classList.remove("armed");
+    b.title = "删除该条提取记录（不影响已生成的笔记）";
+  });
+}
+
+function deleteHistory(seasonId, outputDir, btn) {
+  // 两步行内确认：第一击进入武装态（3.5s 超时回落），第二击执行
+  if (deleteArmed && deleteArmed.sid === seasonId && deleteArmed.dir === outputDir) {
+    disarmDelete();
+    doDeleteHistory(seasonId, outputDir);
+    return;
+  }
+  disarmDelete();
+  btn.textContent = "确定?";
+  btn.classList.add("armed");
+  btn.title = "再点一次确认删除（不影响已生成的笔记）";
+  deleteArmed = { sid: seasonId, dir: outputDir, timer: setTimeout(disarmDelete, 3500) };
+}
+
+async function doDeleteHistory(seasonId, outputDir) {
   try {
     const resp = await postJSON("/api/history/delete", { season_id: seasonId, output_dir: outputDir });
     if (!resp.ok) {
@@ -1254,7 +1281,7 @@ async function loadHistory() {
         return `<div class="hist-row" role="button" tabindex="0" title="${outDir}——点击复填来源，配合「开始提取」增量重跑" onclick="fillFromHistory('${sid}')" onkeydown="if(event.key==='Enter')fillFromHistory('${sid}')"><span class="hist-name">${esc(e.name)}</span>` +
           `<span class="hist-meta">${esc(bits)}</span>` +
           `<span class="hist-time">${esc(when)}</span>` +
-          `<button class="hist-del" title="删除该条提取记录（不影响已生成的笔记）" onclick="event.stopPropagation();deleteHistory('${sid}','${outDir}')">×</button></div>`;
+          `<button class="hist-del" title="删除该条提取记录（不影响已生成的笔记）" onclick="event.stopPropagation();deleteHistory('${sid}','${outDir}',this)">×</button></div>`;
       })
       .join("");
   } catch (e) { /* 历史读取失败不阻塞页面 */ }
@@ -1348,6 +1375,22 @@ try {
       setTimeout(() => host.remove(), 650);
     });
   }
+
+  // 任务状态恢复：页面（重新）载入时接管进行中的任务或恢复已完成的结果。
+  // 修复「运行中刷新页面 → 不恢复轮询，点开始还撞 409」的两头堵死
+  (async function restoreRun() {
+    try {
+      const s = await (await fetch("/api/run")).json();
+      if (s.running) {
+        $("startBtn").disabled = true;
+        setBusy("检测到进行中的任务，已恢复进度显示…");
+        pollTimer = setInterval(poll, 400);
+        poll();
+      } else if (s.phase === "done") {
+        poll();  // poll 是全量渲染器：跑一次即恢复汇总/文件/预览
+      }
+    } catch (e) { /* 服务未连接：顶栏状态灯已提示 */ }
+  })();
 
   // 滚动显现 + 兜底（即使增强逻辑出错，1.6s 后强制全部可见）
   const io = new IntersectionObserver((entries) => {

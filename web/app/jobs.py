@@ -14,6 +14,7 @@ from subtitle_cli import storage
 from subtitle_cli.bilibili.models import EpisodeStatus
 from subtitle_cli.config import ASR_MODEL_SIZE
 from subtitle_cli.dispatch import BILIBILI, create_client, detect_platform
+from subtitle_cli.errors import PlatformError
 from subtitle_cli.migration import format_migration_summary, migrate
 from subtitle_cli.pipeline import has_failure, run_collection, summarize
 from subtitle_cli.vault import check_vault, load_config
@@ -155,7 +156,9 @@ def run_extract_job(
         finish_error(str(exc), 2)
     except Exception as exc:  # noqa: BLE001 - 网页界面兜底展示；traceback 进文件日志
         file_log.exception("提取任务异常")
-        finish_error(f"{type(exc).__name__}: {exc}")
+        # 已知业务错误直接给人话；未知异常保留类名便于识别
+        detail = str(exc) if isinstance(exc, PlatformError) else f"{type(exc).__name__}: {exc}"
+        finish_error(detail)
     finally:
         if demo:
             stop_demo()
@@ -212,6 +215,7 @@ def run_migrate_job(
         finish_error(str(exc), 2)
     except Exception as exc:  # noqa: BLE001 - 网页界面兜底展示；traceback 进文件日志
         file_log.exception("迁移任务异常")
-        finish_error(f"{type(exc).__name__}: {exc}")
+        detail = str(exc) if isinstance(exc, PlatformError) else f"{type(exc).__name__}: {exc}"
+        finish_error(detail)
     finally:
         STATE["running"] = False

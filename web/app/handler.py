@@ -37,6 +37,7 @@ from subtitle_cli.dispatch import (
     resolve_proxy,
     set_platform_subdir,
 )
+from subtitle_cli.errors import PlatformError
 from subtitle_cli.merge import merge_collection
 from subtitle_cli.migration import scan_collections
 from subtitle_cli.pipeline import (
@@ -351,7 +352,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": str(exc)}, 400)
             except Exception as exc:  # noqa: BLE001 - traceback 进文件日志
                 file_log.exception("预览异常")
-                self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
+                detail = str(exc) if isinstance(exc, PlatformError) else f"{type(exc).__name__}: {exc}"
+                self._json({"error": detail}, 500)
             return
 
         if path not in ("/api/extract", "/api/migrate"):

@@ -480,6 +480,9 @@ class BilibiliClient:
                         continue
                     raise RiskControlError(f"{last_error}（重试 {config.MAX_RETRIES} 次后仍失败）")
                 if code not in ok_codes:
+                    if code == -404:
+                        # B站原文（如「啥都木有」）对用户是黑话，翻译成可行动的提示
+                        raise BilibiliError("资源不存在（可能已删除，或链接/ID 有误）")
                     raise BilibiliError(
                         f"业务错误 {code}: {payload.get('message', '')}"
                     )
